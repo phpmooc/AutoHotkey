@@ -3988,8 +3988,6 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPCTSTR aOptions, LPCTS
 		if (control.hwnd = CreateWindowEx(exstyle, _T("ListBox"), _T(""), style
 			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
-			if (opt.tabstop_count)
-				SendMessage(control.hwnd, LB_SETTABSTOPS, opt.tabstop_count, (LPARAM)opt.tabstop);
 			// For now, it seems best to always override a height that would cause zero items to be
 			// displayed.  This is because there is a very thin control visible even if the height
 			// is explicitly set to zero, which seems pointless (there are other ways to draw thin
@@ -4017,6 +4015,8 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPCTSTR aOptions, LPCTS
 					// its specified pixel-width is smaller than the width of the window:
 				opt.height += GetSystemMetrics(SM_CYHSCROLL);
 			}
+			if (opt.tabstop_count)
+				SendMessage(control.hwnd, LB_SETTABSTOPS, opt.tabstop_count, (LPARAM)opt.tabstop);
 			MoveWindow(control.hwnd, opt.x, opt.y, opt.width, opt.height, TRUE); // Repaint, since it might be visible.
 			// Since by default, the OS adjusts list's height to prevent a partial item from showing
 			// (LBS_NOINTEGRALHEIGHT), fetch the actual height for possible use in positioning the
