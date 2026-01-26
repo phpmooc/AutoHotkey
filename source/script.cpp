@@ -1908,10 +1908,18 @@ process_completed_line:
 				case CONDITION_FALSE:
 					hotkey_flag = NULL; // It doesn't look like valid hotkey syntax, so parse it as something else (so the error message won't be ERR_INVALID_KEYNAME).
 					break;
-				//case CONDITION_TRUE:
+				case CONDITION_TRUE:
 					// It's a key that doesn't exist on the current keyboard layout.  Leave hotkey_flag set
 					// so that the section below handles it as a hotkey.  This ensures any same-line action
-					// or trailing block is interpreted correctly.  A warning will be displayed below.
+					// or trailing block is interpreted correctly.
+#ifndef AUTOHOTKEYSC
+					if (!mValidateThenExit) // Current keyboard layout is not relevant in /validate mode.
+#endif
+					{
+						TCHAR msg_text[128];
+						sntprintf(msg_text, _countof(msg_text), _T("Note: The hotkey %s will not be active because it does not exist in the current keyboard layout."), static_cast<LPTSTR>(buf));
+						MsgBox(msg_text);
+					}
 				}
 				*cp = orig_char; // Undo the temp. termination above.
 			}
@@ -2007,6 +2015,12 @@ process_completed_line:
 						// from being a remap (as documented). 
 						// v1.0.40.05: If the destination key has any modifiers,
 						// it is unambiguously a key name rather than a command.
+					}
+					else if (hotkey_validity == CONDITION_TRUE)
+					{
+						// This is valid remap syntax but the source key doesn't exist on the current keyboard layout.
+						// A warning has already been shown.
+						goto continue_main_loop;
 					}
 					else
 					{
@@ -2291,16 +2305,8 @@ process_completed_line:
 						if (hotkey_validity != CONDITION_TRUE)
 							return FAIL; // It already displayed the error.
 						// This hotkey uses a single-character key name, which could be valid on some other
-						// keyboard layout.  Allow the script to start, but warn the user about the problem.
-						// Note that this hotkey's label is still valid even though the hotkey wasn't created.
-#ifndef AUTOHOTKEYSC
-						if (!mValidateThenExit) // Current keyboard layout is not relevant in /validate mode.
-#endif
-						{
-							TCHAR msg_text[128];
-							sntprintf(msg_text, _countof(msg_text), _T("Note: The hotkey %s will not be active because it does not exist in the current keyboard layout."), static_cast<LPTSTR>(buf));
-							MsgBox(msg_text);
-						}
+						// keyboard layout.  Allow the script to start, as the user has already been warned.
+						// Note that this hotkey's function still exists even though the hotkey wasn't created.
 					}
 				}
 			}
