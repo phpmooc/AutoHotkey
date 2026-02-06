@@ -3366,6 +3366,10 @@ size_t Script::GetLine(LineBuffer &aBuf, int aInContinuationSection, bool aInBlo
 			*aBuf = '\0';
 			return 0;
 		}
+		else if (*aBuf == '/' && aBuf[1] == '*')
+			// Avoid stripping ;comments since that would prevent detection of the comment-end
+			// in cases like "/* ; */".
+			return aBuf_length;
 	}
 	//else CONTINUATION_SECTION_WITH_COMMENTS (case #3 above), which due to other checking also means that
 	// this line isn't a comment (though it might have a comment on its right side, which is checked below).
