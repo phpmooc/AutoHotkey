@@ -108,7 +108,7 @@ FuncEntry g_BIF[] =
 	BIFn(RegExMatch, 2, 4, BIF_RegEx, {3}),
 	BIFn(RegExReplace, 2, 6, BIF_RegEx, {4}),
 	BIFn(RegRead, 0, 3, BIF_Reg),
-	BIFn(RegWrite, 0, 4, BIF_Reg),
+	BIFn(RegWrite, 1, 4, BIF_Reg),
 	BIF1(Round, 1, 2),
 	BIFn(RTrim, 1, 2, BIF_Trim),
 	BIF1(RunWait, 1, 4, {4}),
