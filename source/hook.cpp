@@ -1436,8 +1436,10 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	// different modifier combinations, the one that fires might depend on the modifier
 	// state at the time the key was pressed, rather than when it was released.  In other
 	// words, pPrefixKey may be unrelated to the key-up hotkey if it is a standard modifier.
-	if (pPrefixKey && (found_hk || pPrefixKey->as_modifiersLR && !aKeyUp)
-		&& pPrefixKey->was_just_used != AS_PASSTHROUGH_PREFIX)
+	if (pPrefixKey && pPrefixKey->was_just_used != AS_PASSTHROUGH_PREFIX 
+		&& (pPrefixKey->as_modifiersLR && !aKeyUp
+			|| Hotkey::shk[hotkey_id_temp]->mModifierVK // Can't rely on found_hk since this_key.hotkey_to_fire_upon_release may have been used.
+			|| Hotkey::shk[hotkey_id_temp]->mModifierSC))
 		pPrefixKey->was_just_used = AS_PREFIX_FOR_HOTKEY;
 
 	// Now above has ensured that everything is in place for an action to be performed.
