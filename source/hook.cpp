@@ -803,9 +803,9 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			{
 				if (!suppress_this_prefix) // v1.1.34.02: Retain this as a flag for key-up.
 					this_key.was_just_used = AS_PASSTHROUGH_PREFIX;
+				firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, aExtraInfo, fire_with_no_suppress, NULL);
 				if (suppress_this_prefix && !modifiersLRnew) // So far, it looks like the prefix should be suppressed.
 				{
-					firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, aExtraInfo, fire_with_no_suppress, NULL);
 					if (!firing_is_certain || !fire_with_no_suppress) // Hotkey is ineligible to fire or lacks the no-suppress prefix.
 					{
 						// Resetting the ID is necessary to avoid the following cases:
@@ -866,7 +866,9 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// this_toggle_key_can_be_toggled
 			if (!suppress_this_prefix) // Only for this condition. Not needed for toggle keys and not wanted for modifiers as it would prevent menu suppression.
 				this_key.no_suppress |= NO_SUPPRESS_NEXT_UP_EVENT;
-			if (this_key.as_modifiersLR || !suppress_this_prefix || this_toggle_key_can_be_toggled)
+			// If a fire-on-release variant was identified, suppression should depend only on that variant.
+			if (firing_is_certain ? fire_with_no_suppress :
+				(this_key.as_modifiersLR || !suppress_this_prefix || this_toggle_key_can_be_toggled))
 				return AllowKeyToGoToSystem;
 			// Mark this key as having been suppressed, so key-up will also be suppressed.
 			this_key.hotkey_down_was_suppressed = true;
