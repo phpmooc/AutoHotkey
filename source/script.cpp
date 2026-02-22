@@ -8389,9 +8389,11 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 						this_infix_item.symbol = SYM_BITXOR;
 					break;
 				case '~':
-					if (cp1 == '=')
+					if (cp1 == '=' || cp1 == '!' && cp[2] == '=')
 					{
 						++cp;
+						if (cp1 == '!')
+							++cp, ++allow_for_extra_postfix;
 						this_infix_item.callsite = new CallSite();
 						this_infix_item.callsite->func = ExprOp<Op_RegEx, 0>();
 						this_infix_item.callsite->param_count = 2;
@@ -8697,14 +8699,14 @@ unquoted_literal:
 				if (this_deref_ref.type == DT_QSTRING)
 				{
 					cp = omit_leading_whitespace(cp + 1);
-					if (*cp && _tcschr(_T("+-*&~!"), *cp) && cp[1] != '=' && (cp[1] != '&' || *cp != '&'))
+					if (*cp && _tcschr(_T("+-*&!"), *cp) && cp[1] != '=' && (cp[1] != '&' || *cp != '&'))
 					{
 						// The symbol following this literal string is either a unary operator or a
 						// binary operator which can't (at least logically) be applied to a literal
 						// string. Since the user's intention isn't clear, treat it as a syntax error.
 						// The most common cases where this helps are:
-						//	MsgBox % "var's address is " &var  ; Misinterpreted as SYM_BITAND.
-						//	MsgBox % "counter is now " ++var   ; Misinterpreted as SYM_POST_INCREMENT.
+						//	MsgBox "var's address is " &var  ; Misinterpreted as SYM_BITAND.
+						//	MsgBox "counter is now " ++var   ; Misinterpreted as SYM_POST_INCREMENT.
 						return LineError(_T("Unexpected operator following literal string."), FAIL, cp);
 					}
 				}
@@ -9416,8 +9418,16 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 			break;
 
 		case SYM_REGEXMATCH: // a ~= b  ->  RegExMatch(a, b)
+		{
 			this_postfix->symbol = SYM_FUNC;
+			if (this_postfix->error_reporting_marker[1] == '!')
+			{
+				auto not_op = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
+				not_op->symbol = SYM_HIGHNOT;
+				postfix[++postfix_count] = not_op;
+			}
 			break;
+		}
 
 		case SYM_AND:
 		case SYM_OR:
