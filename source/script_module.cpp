@@ -236,17 +236,17 @@ ResultType Script::ResolveImports(ScriptImport &imp)
 	if (  !(imp.mod = mModules.Find(imp.mod_name, &at))  )
 	{
 		FileIndexType file_index;
-		switch (FindModuleFileIndex(imp.mod_name, file_index))
+		switch (FindModuleFileIndex(imp.mod_name, file_index, imp.file_index))
 		{
 		default:	return ScriptError(_T("Module not found"), imp.mod_name);
 		case FAIL:	return FAIL;
 		case OK:	break;
 		}
-		// Search by file index in case of two different paths referring to the same file.
-		for (int i = 0; i < mModules.mCount; ++i)
-			if (mModules.mItem[i]->mSelfFileIndex == file_index)
+		// Search by file index, which corresponds to the file's full path.
+		for (auto m = mLastModule; m; m = m->mPrev)
+			if (m->mSelfFileIndex == file_index)
 			{
-				imp.mod = mModules.mItem[i];
+				imp.mod = m;
 				break;
 			}
 		if (!imp.mod)
@@ -257,8 +257,6 @@ ResultType Script::ResolveImports(ScriptImport &imp)
 			mLastModule = nullptr; // Start a new chain.
 			imp.mod = mCurrentModule = new ScriptModule(imp.mod_name);
 			imp.mod->mSelfFileIndex = file_index;
-			if (!mModules.Insert(imp.mod, at))
-				return MemoryError();
 			if (!LoadIncludedFile(path, false, false))
 				return FAIL;
 			if (!CloseCurrentModule())
@@ -407,6 +405,11 @@ LPCWSTR Script::InitModuleSearchPath()
 	else
 		path_spec = _T(".;%A_MyDocuments%\\AutoHotkey;%A_AhkPath%\\..");
 
+	// Ensure a consistent result if A_LineFile is used, since this is only
+	// done once for the lifetime of the program, not once for each Import.
+	mCurrFileIndex = 0;
+	mCombinedLineNumber = 0;
+
 	LPTSTR deref_path;
 	if (!DerefInclude(deref_path, path_spec))
 		return _T("");
@@ -433,7 +436,7 @@ LPCWSTR Script::InitModuleSearchPath()
 }
 
 
-ResultType Script::FindModuleFileIndex(LPCTSTR aName, FileIndexType &aFileIndex)
+ResultType Script::FindModuleFileIndex(LPCTSTR aName, FileIndexType &aFileIndex, FileIndexType aLocalFileIndex)
 {
 	if (*aName == '*') // *Resource name or stdin.
 		return SourceFileIndex(aName, aFileIndex);
@@ -445,23 +448,39 @@ ResultType Script::FindModuleFileIndex(LPCTSTR aName, FileIndexType &aFileIndex)
 	const auto dir_suffix_length = _countof(_T("\\__Init") EXT_AUTOHOTKEY) - 1;
 
 	TCHAR buf[T_MAX_PATH];
-	
+
+	// Always search the directory of the current file first.
+	LPCTSTR dir = search_path;
+	auto line_file = Line::sSourceFile[aLocalFileIndex];
+	if (*line_file != '*')
+	{
+		auto p = _tcsrchr(line_file, '\\');
+		if (p && p - line_file < _countof(buf))
+		{
+			tmemcpy(buf, line_file, p - line_file + 1);
+			buf[p - line_file + 1] = '\0';
+			dir = buf;
+		}
+	}
+
 	auto name_length = _tcslen(aName);
 	if (name_length + dir_suffix_length >= _countof(buf))
 		return CONDITION_FALSE;
 
-	DWORD attr;
-	size_t dir_length;
-	for (auto dir = search_path; *dir; dir += dir_length + 1)
+	for (LPCTSTR next_dir; *dir; dir = next_dir)
 	{
-		dir_length = _tcslen(dir);
+		if (dir == buf)
+			next_dir = search_path;
+		else
+			next_dir = dir + _tcslen(dir) + 1;
+
 		if (!SetCurrentDirectory(dir))
 			continue; // Ignore this item.
 
 		tmemcpy(buf, aName, name_length + 1);
 
 		// Try exact aName first.
-		attr = GetFileAttributes(buf);
+		DWORD attr = GetFileAttributes(buf);
 		auto p = buf + name_length;
 		if ((attr & FILE_ATTRIBUTE_DIRECTORY) && attr != INVALID_FILE_ATTRIBUTES)
 		{

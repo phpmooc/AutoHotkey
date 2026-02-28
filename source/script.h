@@ -2349,7 +2349,7 @@ public:
 	void InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSuffix);
 	LPTSTR FindLibraryFile(LPTSTR aName, size_t aNameLength, bool aIsModule = false);
 	LPCWSTR InitModuleSearchPath();
-	ResultType FindModuleFileIndex(LPCTSTR aName, FileIndexType &aFileIndex);
+	ResultType FindModuleFileIndex(LPCTSTR aName, FileIndexType &aFileIndex, FileIndexType aLocalFileIndex);
 #endif
 	IObject *GetBuiltinObject(LPCTSTR aName);
 	static Func *GetBuiltInFunc(LPCTSTR aFuncName);
