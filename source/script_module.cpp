@@ -427,6 +427,10 @@ LPCWSTR Script::InitModuleSearchPath()
 		len = GetFullPathName(p, space, cp, nullptr);
 		if (!len || len >= space)
 			continue; // Ignore this item.
+		// Ignore nonexistent directories so each Import won't do unnecessary checks.
+		DWORD attr = GetFileAttributes(cp);
+		if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY))
+			continue; // Ignore this item.
 		cp += len + 1; // Write the next item after the null terminator.
 	}
 	if (cp == buf) // No items; could happen in the case of a malformed env var.
