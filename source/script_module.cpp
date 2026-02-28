@@ -414,14 +414,15 @@ LPCWSTR Script::InitModuleSearchPath()
 	if (!DerefInclude(deref_path, path_spec))
 		return _T("");
 
-	for (auto p = deref_path; *p; p = d + 1)
+	for (auto p = deref_path; *p; p = d)
 	{
-		while (*p == ';') ++p;
 		for (d = p; *d && *d != ';'; ++d);
-		if (d == p // Empty item at the end.
-			|| (cp - buf) + (d - p) + 1 > _countof(buf)) // Due to rarity, ignore any items that won't fit.
+		if (*d)
+			*d++ = '\0'; // Terminate within deref_path.
+		if (!*p)
+			continue;
+		if (cp - buf >= _countof(buf)) // Due to rarity, ignore any items that won't fit.
 			break;
-		*d = '\0'; // Terminate within deref_path.
 		space = (DWORD)(_countof(buf) - (cp - buf));
 		len = GetFullPathName(p, space, cp, nullptr);
 		if (!len || len >= space)
