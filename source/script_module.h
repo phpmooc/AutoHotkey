@@ -25,8 +25,8 @@ class ScriptModule : public ObjectBase
 {
 public:
 	LPCTSTR mName = nullptr;
-	Line *mFirstLine = nullptr;
-	Label *mFirstLabel = nullptr;
+	Line *mFirstLine = nullptr, *mLastLine = nullptr;
+	Label *mFirstLabel = nullptr, *mLastLabel = nullptr;
 	ScriptImport *mImports = nullptr;
 	ScriptModule *mPrev = nullptr;
 	VarList mVars;

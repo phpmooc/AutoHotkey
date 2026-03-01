@@ -306,11 +306,10 @@ VarEntry g_BIV_A[] =
 
 
 Script::Script()
-	: mFirstLine(NULL), mLastLine(NULL), mCurrLine(NULL)
+	: mLastLine(NULL), mCurrLine(NULL)
 	, mThisHotkeyName(_T("")), mPriorHotkeyName(_T("")), mThisHotkeyStartTime(0), mPriorHotkeyStartTime(0)
 	, mEndChar(0), mThisHotkeyModifiersLR(0)
 	, mOnClipboardChangeIsRunning(false)
-	, mLastLabel(NULL)
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
 	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
 	, mNextLineIsFunctionBody(false)
@@ -589,6 +588,7 @@ ResultType Script::Init(LPTSTR aScriptFilename, IObject *aArgs)
 	// Up to this point, mCurrentModule == &mBuiltinModule for initialization of built-ins.
 	// From this point, declarations should add names to a script module, not mBuiltinModule.
 	mCurrentModule = &mDefaultModule;
+	mDefaultModule.mPrev = &mBuiltinModule; // Probably only necessary for "#Module AHK" to work.
 	mModules.Insert(&mDefaultModule, 0); // __Main
 	mModules.Insert(&mBuiltinModule, 1); // AHK
 	ASSERT(mModules.mCount == 2);
@@ -2484,7 +2484,6 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		ScriptWarning(g_WarnMode, _T("Some non-ASCII characters could not be decoded.\n\nEnsure that the file is saved as UTF-8."));
 	}
 
-	++mCombinedLineNumber; // L40: Put the implicit ACT_EXIT on the line after the last physical line (for the debugger).
 	return OK;
 }
 
@@ -4215,7 +4214,7 @@ ResultType Script::AddLabel(LPTSTR aLabelName, bool aAllowDupe)
 	if (!*aLabelName)
 		return FAIL; // For now, silent failure because callers should check this beforehand.
 	Label *&first_label = g->CurrentFunc ? g->CurrentFunc->mFirstLabel : mCurrentModule->mFirstLabel;
-	Label *&last_label  = g->CurrentFunc ? g->CurrentFunc->mLastLabel  : mLastLabel;
+	Label *&last_label  = g->CurrentFunc ? g->CurrentFunc->mLastLabel  : mCurrentModule->mLastLabel;
 	if (!aAllowDupe && FindLabel(aLabelName))
 	{
 		// Don't attempt to dereference label->mJumpToLine because it might not
@@ -5144,9 +5143,9 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	Line &line = *the_new_line;  // For performance and convenience.
 
 	line.mPrevLine = mLastLine;  // Whether NULL or not.
-	if (mFirstLine == NULL)
-		mFirstLine = the_new_line;
-	else
+	if (!mCurrentModule->mFirstLine)
+		mCurrentModule->mFirstLine = the_new_line;
+	if (mLastLine)
 		mLastLine->mNextLine = the_new_line;
 	// This must be done after the above:
 	mLastLine = the_new_line;
@@ -5300,7 +5299,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	// by searching only g->CurrentFunc, which has no labels in those cases.
 	//if (!mNoUpdateLabels)
 	{
-		for (Label *label = g->CurrentFunc ? g->CurrentFunc->mLastLabel : mLastLabel;
+		for (Label *label = g->CurrentFunc ? g->CurrentFunc->mLastLabel : mCurrentModule->mLastLabel;
 			label != NULL && label->mJumpToLine == NULL; label = label->mPrevLabel)
 		{
 			if (line.mActionType == ACT_ELSE || line.mActionType == ACT_UNTIL || line.mActionType == ACT_CATCH)
@@ -7652,7 +7651,7 @@ ResultType Script::PreparseExpressions(FuncList &aFuncs)
 ResultType Script::PreparseCommands()
 {
 	for (mCurrentModule = mLastModule; mCurrentModule; mCurrentModule = mCurrentModule->mPrev)
-		if (!PreparseCommands(mCurrentModule->mFirstLine))
+		if (!PreparseCommands(mCurrentModule))
 			return FAIL;
 	mCurrentModule = &mDefaultModule; // Reset in case debugger queries properties prior to AutoExecSection().
 	return OK;
@@ -7660,12 +7659,23 @@ ResultType Script::PreparseCommands()
 
 
 
-ResultType Script::PreparseCommands(Line *aStartingLine)
+ResultType Script::PreparseCommands(ScriptModule *aModule)
 // Preparse any commands which might rely on blocks having been fully preparsed,
 // such as any command which has a jump target (label).
 // Also perform some late-stage optimizations and validation.
 {
-	for (Line *line = aStartingLine; line; line = line->mNextLine)
+	// Terminate each module with a Line so that all labels have a target and
+	// all control flow statements that need it have a non-null mRelatedLine.
+	if (aModule->mLastLine)
+	{
+		mPendingRelatedLine = aModule->mLastLine->mParentLine;
+		mCombinedLineNumber = aModule->mLastLine->mLineNumber + 1; // +1 to distinguish it from the last executable line when debugging.
+		mCurrFileIndex = aModule->mLastLine->mFileIndex;
+	}
+	if (!AddLine(ACT_EXIT))
+		return FAIL;
+
+	for (Line *line = aModule->mFirstLine; line; line = line->mNextLine)
 	{
 		LPTSTR line_raw_arg1 = LINE_RAW_ARG1; // Resolve only once to help reduce code size.
 		LPTSTR line_raw_arg2 = LINE_RAW_ARG2; //

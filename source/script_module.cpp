@@ -29,19 +29,26 @@ ResultType ScriptModule::Invoke(IObject_Invoke_PARAMS_DECL)
 ResultType Script::ParseModuleDirective(LPCTSTR aName)
 {
 	int at;
-	if (mModules.Find(aName, &at))
-		return ScriptError(ERR_DUPLICATE_DECLARATION, aName);
-	// TODO: Validate module names.
-	aName = SimpleHeap::Alloc(aName);
-	auto mod = new ScriptModule(aName);
-	// Let any previous #Warn settings carry over from the previous module, by default.
-	mod->Warn_LocalSameAsGlobal = mCurrentModule->Warn_LocalSameAsGlobal;
-	mod->Warn_Unreachable = mCurrentModule->Warn_Unreachable;
-	mod->Warn_VarUnset = mCurrentModule->Warn_VarUnset;
-	if (!mModules.Insert(mod, at))
-		return MemoryError();
-	CloseCurrentModule();
-	mCurrentModule = mod;
+	auto mod = mModules.Find(aName, &at);
+	if (!mod)
+	{
+		mod = OpenNewModule(SimpleHeap::Alloc(aName));
+
+		// Let any previous #Warn settings carry over from the previous module, by default.
+		mod->Warn_LocalSameAsGlobal = mCurrentModule->Warn_LocalSameAsGlobal;
+		mod->Warn_Unreachable = mCurrentModule->Warn_Unreachable;
+		mod->Warn_VarUnset = mCurrentModule->Warn_VarUnset;
+		if (!mModules.Insert(mod, at))
+			return MemoryError();
+	}
+	if (mod != mCurrentModule)
+	{
+		CloseCurrentModule();
+		mCurrentModule = mod;
+		mLastLine = mod->mLastLine; // Null unless we reopened an existing module.
+		if (mLastLine)
+			mPendingRelatedLine = mLastLine->mParentLine;
+	}
 	return CONDITION_TRUE;
 }
 
@@ -255,7 +262,7 @@ ResultType Script::ResolveImports(ScriptImport &imp)
 			auto cur_mod = mCurrentModule;
 			auto last_mod = mLastModule;
 			mLastModule = nullptr; // Start a new chain.
-			imp.mod = mCurrentModule = new ScriptModule(imp.mod_name);
+			imp.mod = mCurrentModule = OpenNewModule(imp.mod_name);
 			imp.mod->mSelfFileIndex = file_index;
 			if (!LoadIncludedFile(path, false, false))
 				return FAIL;
@@ -332,24 +339,23 @@ ResultType Script::ResolveImports(ScriptImport &imp)
 
 ResultType Script::CloseCurrentModule()
 {
-	// Terminate each module with RETURN so that all labels have a target and
-	// all control flow statements that need it have a non-null mRelatedLine.
-	if (!AddLine(ACT_EXIT))
-		return FAIL;
-
-	// Reset these so they don't carry across into the next module.
+	// Reset these so they don't affect the next module.
 	g->HotCriterion = nullptr;
 	*mClassStructPack = 0;
 
-	mCurrentModule->mPrev = mLastModule;
-	mLastModule = mCurrentModule;
-
-	ASSERT(!mCurrentModule->mFirstLine || mCurrentModule->mFirstLine == mFirstLine);
-	mCurrentModule->mFirstLine = mFirstLine;
-	mFirstLine = nullptr; // Start a new linked list of lines.
-	mLastLine = nullptr;
-	mLastLabel = nullptr; // Start a new linked list of labels.
+	mCurrentModule->mLastLine = mLastLine;
+	mLastLine = nullptr; // Start a new linked list of lines.
+	mPendingRelatedLine = nullptr;
 	return OK;
+}
+
+
+ScriptModule *Script::OpenNewModule(LPCTSTR aName)
+{
+	auto mod = new ScriptModule(aName);
+	mod->mPrev = mLastModule;
+	mLastModule = mod;
+	return mod;
 }
 
 
