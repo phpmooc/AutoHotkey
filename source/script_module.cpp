@@ -60,93 +60,63 @@ ResultType Script::ParseModuleDirective(LPCTSTR aName)
 }
 
 
-ResultType Script::ParseImportStatement(LPTSTR aBuf, bool aDirective)
+ResultType Script::ParseImportDirective(LPTSTR aBuf)
 {
-	bool is_export = !_tcsnicmp(aBuf, _T("Export"), 6) && IS_SPACE_OR_TAB(aBuf[6]);
-	if (is_export)
-		aBuf = omit_leading_whitespace(aBuf + 7);
-	if (!aDirective)
+	bool is_export = false;
+	if (!_tcsnicmp(aBuf, _T("Export"), 6) && IS_SPACE_OR_TAB(aBuf[6]))
 	{
-		if (!(!_tcsnicmp(aBuf, _T("Import"), 6) && IS_SPACE_OR_TAB(aBuf[6])))
-			return CONDITION_FALSE;
-		aBuf = omit_leading_whitespace(aBuf + 7);
+		auto cp = omit_leading_whitespace(aBuf + 7);
+		if ( !(*cp == '{' || !_tcsnicmp(cp, _T("as"), 2) && IS_SPACE_OR_TAB(cp[2])) )
+		{
+			is_export = true;
+			aBuf = cp;
+		}
 	}
-
-	// Return CONDITION_FALSE to try to interpret aBuf as something else.
-	// Return FAIL if this is definitely invalid (caller calls ScriptError).
-	ResultType certainty = CONDITION_FALSE;
 
 	LPTSTR cp = aBuf;
 	LPTSTR mod_name = nullptr, mod_name_end = nullptr;
 	LPTSTR var_name = nullptr, var_name_end = nullptr;
 	LPTSTR names = nullptr, names_end = nullptr;
 	bool import_file = false, import_wildcard = false;
-	if (*cp == '{' || *cp == '*')
-	{
-		if (*cp == '{')
-		{
-			names = cp + 1;
-			// The simple method might allow false positives (e.g. Import {x: "} from ..."}).
-			//cp = _tcschr(cp, '}'); // Should always be found due to GetLineContExpr().
-			cp += FindExprDelim(cp, '}', 1);
-			if (!*cp) // Probably not possible due to GetLineContExpr.
-				return CONDITION_FALSE;
-			names_end = cp++;
-		}
-		else
-			import_wildcard = true;
-		cp = omit_leading_whitespace(cp + 1);
-		if (_tcsnicmp(cp, _T("From"), 4) || !IS_SPACE_OR_TAB(cp[4]))
-			return CONDITION_FALSE;
-		cp = omit_leading_whitespace(cp + 5);
-		certainty = FAIL; // `Import {} From` can't be anything but Import.
-	}
+
 	if (import_file = (*cp == '"' || *cp == '\''))
 	{
 		mod_name = cp + 1;
 		cp += FindTextDelim(cp, *cp, 1);
-		if (!*cp || cp[1] && !IS_SPACE_OR_TAB(cp[1]))
-			return certainty;
+		if (!*cp)
+			return FAIL;
 		mod_name_end = cp++;
 	}
 	else
 	{
 		mod_name = cp;
-		cp = find_identifier_end(cp);
-		if (cp == mod_name || *cp && !IS_SPACE_OR_TAB(*cp))
-			return certainty;
-		mod_name_end = cp;
+		mod_name_end = cp = find_identifier_end(cp);
+		if (cp == mod_name)
+			return FAIL;
 		if (*cp)
 			++cp;
 	}
-	if (*cp) // There's a character after the quote or space which terminates the module name/path.
+	if (*cp) // There's a character after the module name/path.
 	{
 		cp = omit_leading_whitespace(cp);
 		if (!_tcsnicmp(cp, _T("as"), 2) && IS_SPACE_OR_TAB(cp[2]))
 		{
-			cp = omit_leading_whitespace(cp + 3);
-			if (!IS_IDENTIFIER_CHAR(*cp))
+			var_name = omit_leading_whitespace(cp + 3);
+			var_name_end = find_identifier_end(var_name);
+			if (var_name_end == var_name)
 				return FAIL;
-			cp = var_name_end = find_identifier_end(var_name = cp);
-			cp = omit_leading_whitespace(cp);
-			certainty = FAIL; // `Import ... as ` can't be anything but Import.
+			cp = omit_leading_whitespace(var_name_end);
 		}
-		if (*cp == '{' && !names)
+		if (*cp == '{')
 		{
 			names = cp + 1;
 			cp += FindExprDelim(cp, '}', 1);
 			if (!*cp || cp[1])
-				return certainty;
+				return FAIL;
 			names_end = cp;
 		}
 		else if (*cp)
-			return certainty;
-	}
-	else if (mod_name == aBuf) // `Import M`, not `Import {} from M` or `Import "file"`.
-	{
-		// Interpret `Import M` as a function call statement, as in v2.0.
-		if (!aDirective && !is_export)
-			return CONDITION_FALSE;
+			return FAIL;
 	}
 
 	auto imp = new ScriptImport();
@@ -154,7 +124,7 @@ ResultType Script::ParseImportStatement(LPTSTR aBuf, bool aDirective)
 	imp->mod_name = SimpleHeap::Alloc(mod_name, mod_name_end - mod_name);
 	if (var_name)
 		imp->var_name = SimpleHeap::Alloc(var_name, var_name_end - var_name);
-	else if (mod_name == aBuf) // `Import M...`, not `from M` or path.
+	else if (!import_file)
 		imp->var_name = imp->mod_name;
 	if (import_file)
 		ConvertEscapeSequences(imp->mod_name);

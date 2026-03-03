@@ -2390,7 +2390,7 @@ public:
 	ScriptModule *CurrentModule() { return g->CurrentFunc ? g->CurrentFunc->mModule : mCurrentModule; }
 	ScriptModule *FindDirectiveModule(LPCTSTR aName, ScriptModule *aList);
 	ResultType ParseModuleDirective(LPCTSTR aName);
-	ResultType ParseImportStatement(LPTSTR aBuf, bool aDirective = false);
+	ResultType ParseImportDirective(LPTSTR aBuf);
 	ResultType CloseCurrentModule();
 	void ReopenModule(ScriptModule *aMod);
 	ScriptModule *CreateModule(LPCTSTR aName);

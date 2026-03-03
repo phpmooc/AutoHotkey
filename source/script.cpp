@@ -2422,15 +2422,6 @@ process_completed_line:
 				return FAIL;
 			goto continue_main_loop;
 		}
-		else if (!mLineParent)
-		{
-			switch (ParseImportStatement(buf))
-			{
-			case FAIL: return ScriptError(_T("Invalid import"), buf);
-			case OK: goto continue_main_loop;
-			//default: not an import statement.
-			}
-		}
 
 		// Parse the command, assignment or expression, including any same-line open brace or sub-action
 		// for ELSE, TRY, CATCH or FINALLY.  Unlike braces at the start of a line (processed above), this
@@ -4011,7 +4002,9 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 	if (IS_DIRECTIVE_MATCH(_T("#Import")))
 	{
-		if (ParseImportStatement(parameter, true) != OK)
+		if (mLineParent || mClassObjectCount)
+			return ScriptError(ERR_UNEXPECTED_DIRECTIVE, aBuf);
+		if (!ParseImportDirective(parameter))
 			return ScriptError(_T("Invalid import"), aBuf);
 		return CONDITION_TRUE;
 	}
