@@ -35,6 +35,7 @@ public:
 	FileIndexType *mFiles = nullptr, mFilesCount = 0, mFilesCountMax = 0;
 	FileIndexType mSelfFileIndex = ABSOLUTE_MAX_SOURCE_FILES;
 	FileIndexType mOuterFileIndex = ABSOLUTE_MAX_SOURCE_FILES;
+	LineNumberType mDirectiveLineNumber = 0;
 	bool mExecuted = false;
 	bool mIsBuiltinModule = false;
 

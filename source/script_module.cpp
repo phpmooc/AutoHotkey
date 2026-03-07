@@ -55,11 +55,16 @@ ResultType Script::ParseModuleDirective(LPCTSTR aName)
 
 		mod = CreateModule(SimpleHeap::Alloc(aName));
 		mod->mOuterFileIndex = mCurrFileIndex;
+		mod->mDirectiveLineNumber = mCombinedLineNumber;
 
 		// Let any previous #Warn settings carry over from the previous module, by default.
 		mod->Warn_LocalSameAsGlobal = mCurrentModule->Warn_LocalSameAsGlobal;
 		mod->Warn_Unreachable = mCurrentModule->Warn_Unreachable;
 		mod->Warn_VarUnset = mCurrentModule->Warn_VarUnset;
+	}
+	else if (mCombinedLineNumber == mod->mDirectiveLineNumber && mCurrFileIndex == mod->mOuterFileIndex)
+	{
+		return ScriptError(_T("#Module in duplicate #Include."));
 	}
 	if (mod != mCurrentModule)
 	{
