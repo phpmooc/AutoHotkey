@@ -168,7 +168,12 @@ Var *Script::FindImportedVar(LPCTSTR aVarName)
 		{
 			auto var = imp->mod->mVars.Find(aVarName);
 			if (var && var->IsExported())
-				return var;
+			{
+				if (imp->mod->mExecuted)
+					return var;
+				// AddNewImportVar must be used to support executing the module on first reference.
+				return AddNewImportVar(var->mName, var, imp->mod, false);
+			}
 		}
 	}
 	return nullptr;
@@ -181,7 +186,7 @@ Var *Script::FindImportedVar(LPCTSTR aVarName)
 // Caller provides persistent memory for aVarName.
 Var *Script::AddNewImportVar(LPTSTR aVarName, Var *aAliasFor, IObject *aModule, bool aExport)
 {
-	ASSERT(aVarName && (aAliasFor || aModule));
+	ASSERT(aVarName && aModule);
 	int at;
 	auto var = mCurrentModule->mVars.Find(aVarName, &at);
 	if (var)
@@ -205,17 +210,7 @@ Var *Script::AddNewImportVar(LPTSTR aVarName, Var *aAliasFor, IObject *aModule, 
 		MemoryError();
 		return nullptr;
 	}
-	if (aAliasFor)
-	{
-		// For code size, aliasing is used even for constants.  For non-dynamic references to
-		// constants, PreparseVarRefs() eliminates both the alias and the var reference itself.
-		var->UpdateAlias(aAliasFor);
-	}
-	else
-	{
-		var->Assign(aModule);
-		var->MakeReadOnly();
-	}
+	var->SetImport(aModule, aAliasFor);
 	if (aExport)
 		var->Scope() |= VAR_EXPORTED;
 	return var;
@@ -349,7 +344,7 @@ ResultType Script::ResolveImports(ScriptImport &imp, ScriptModule *aDirectiveLis
 					*cp = '\0';
 					while (IS_SPACE_OR_TAB(c)) c = *++cp; // Find next non-whitespace.
 				}
-				auto imported = AddNewImportVar(var_name, exported, nullptr, imp.is_export);
+				auto imported = AddNewImportVar(var_name, exported, imp.mod, imp.is_export);
 				if (!imported)
 					return FAIL;
 			}

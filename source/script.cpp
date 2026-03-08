@@ -588,7 +588,6 @@ ResultType Script::Init(LPTSTR aScriptFilename, IObject *aArgs)
 	// Up to this point, mCurrentModule == &mBuiltinModule for initialization of built-ins.
 	// From this point, declarations should add names to a script module, not mBuiltinModule.
 	mCurrentModule = &mDefaultModule;
-	mDefaultModule.mPrev = &mBuiltinModule; // Probably only necessary for "#Module AHK" to work.
 	mDefaultModule.mSelfFileIndex = 0;
 
 	if (aArgs) // Caller-provided command-line args.
@@ -1060,14 +1059,10 @@ ResultType Script::ExecuteModule(ScriptModule *aModule)
 	if (!aModule->mFirstLine || aModule->mExecuted)
 		return OK;
 	aModule->mExecuted = true; // Set first to block recursion in cases where imp->mod imports aModule.
-	for (auto imp = aModule->mImports; imp; imp = imp->next)
-	{
-		auto result = ExecuteModule(imp->mod);
-		if (result != OK)
-			return result;
-	}
-	mCurrentModule = aModule;
-	return aModule->mFirstLine->ExecUntil(UNTIL_RETURN);
+	auto prev = std::exchange(mCurrentModule, aModule);
+	auto result = aModule->mFirstLine->ExecUntil(UNTIL_RETURN);
+	mCurrentModule = prev;
+	return result;
 }
 
 
@@ -1436,6 +1431,16 @@ UINT Script::LoadFromFile(LPCTSTR aFileSpec)
 
 	if (!CloseCurrentModule() || !ResolveImports())
 		return LOADING_FAILED;
+
+	if (mBuiltinModule.mFirstLine) // `#Module AHK` was used.
+	{
+		// Add AHK module last, so it will execute first.  Must be done before Preparse calls.
+		// Other modules use a flagged alias (Var::SetImport) for every imported name to trigger
+		// module execution on first reference, but that would be wasteful for the built-in
+		// module since built-in functions are usually called very often and early.
+		mBuiltinModule.mPrev = mLastModule;
+		mLastModule = &mBuiltinModule;
+	}
 
 	// Preparse all expressions and resolve all variable references.  The outer-most scope
 	// is preparsed first, then each function, working inward through all nested functions.
