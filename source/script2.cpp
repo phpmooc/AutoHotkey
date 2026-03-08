@@ -3096,6 +3096,8 @@ bif_impl FResult LoadPicture(StrArg aFilename, optl<StrArg> aOptions, int *aImag
 
 BIF_DECL(BIF_Type)
 {
+	if (!aParamCount)
+		_f_return_p(_T("unset"));
 	_f_return_p(TokenTypeString(*aParam[0]));
 }
 
@@ -3108,6 +3110,7 @@ LPTSTR TokenTypeString(ExprTokenType &aToken)
 	case SYM_INTEGER: return INTEGER_TYPE_STRING;
 	case SYM_FLOAT: return FLOAT_TYPE_STRING;
 	case SYM_OBJECT: return TokenToObject(aToken)->Type();
+	case SYM_MISSING: return _T("unset");
 	default: return _T(""); // For maintainability.
 	}
 }
