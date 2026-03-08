@@ -196,7 +196,7 @@ Var *Script::AddNewImportVar(LPTSTR aVarName, Var *aAliasFor, IObject *aModule, 
 		{
 			if (aAliasFor ? var->IsAlias() && var->GetAliasFor() == aAliasFor : var->ToObject() == aModule)
 				return var; // Already imported.
-			ConflictingDeclarationError(_T("Import"), var);
+			ConflictingDeclarationError(_T("import"), var);
 			return nullptr;
 		}
 		ASSERT(!var->IsAssignedSomewhere());
@@ -333,9 +333,18 @@ ResultType Script::ResolveImports(ScriptImport &imp, ScriptModule *aDirectiveLis
 				c = *(cp = find_identifier_end(cp));
 				*cp = '\0';
 				while (IS_SPACE_OR_TAB(c)) c = *++cp; // Find next non-whitespace.
-				auto exported = imp.mod->mVars.Find(mod_name);
+				int at;
+				auto exported = imp.mod->mVars.Find(mod_name, &at);
 				if (!exported)
-					return ScriptError(_T("No such export"), mod_name);
+				{
+					// Since ResolveImports() does everything in one stage, imported names for some
+					// modules don't exist yet.  Undeclared (but assigned) global variables also do
+					// not exist at this stage.  The following allows both to be imported.
+					exported = new Var(mod_name, VAR_GLOBAL);
+					if (!exported || !imp.mod->mVars.Insert(exported, at))
+						return MemoryError();
+					//return ScriptError(_T("No such export"), mod_name);
+				}
 				if (!_tcsnicmp(cp, _T("as"), 2) && IS_SPACE_OR_TAB(cp[2]))
 				{
 					var_name = omit_leading_whitespace(cp + 3);
