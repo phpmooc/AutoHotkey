@@ -1804,6 +1804,8 @@ ResultType Script::LoadIncludedFile(TextStream *fp)
 
 	bool blocks_previously_open = mLineParent || mClassObjectCount; // For error detection.
 
+	auto module_previously_open = mCurrentModule;
+
 	LineBuffer buf, next_buf;
 	size_t &buf_length = buf.length, &next_buf_length = next_buf.length;
 
@@ -2487,12 +2489,8 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		ScriptWarning(g_WarnMode, _T("Some non-ASCII characters could not be decoded.\n\nEnsure that the file is saved as UTF-8."));
 	}
 
-	if (mCurrentModule->mOuterFileIndex == source_file_index)
-	{
-		auto mod = mCurrentModule;
-		do mod = mod->mPrev; while (mod->mOuterFileIndex == source_file_index);
-		ReopenModule(mod);
-	}
+	if (mCurrentModule != module_previously_open)
+		ReopenModule(module_previously_open);
 
 	return OK;
 }
