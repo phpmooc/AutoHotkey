@@ -267,15 +267,15 @@ BIF_DECL(BIF_GetMethod)
 }
 
 
-BIF_DECL(BIF_StructFromPtr)
+BIF_DECL(Struct_At)
 {
 	auto class_ = ParamIndexToObject(0);
 	auto proto = class_ && class_->IsOfType(Object::sPrototype) ? ((Object*)class_)->ClassGetPrototype() : nullptr;
 	if (!proto || !proto->IsDerivedFrom(Object::sStructPrototype) || proto->LockStructSize() == 0)
-		_f_throw_param(0);
+		_f_throw(_T("Invalid class"));
 	auto ptr = (UINT_PTR)ParamIndexToInt64(1);
 	if (ptr < 65536)
-		_f_throw_param(1);
+		return (void)aResultToken.ParamError(0, aParam[1]);
 	auto obj = Object::CreateStructPtr(ptr, proto, aResultToken);
 	if (obj)
 		_f_return(obj);

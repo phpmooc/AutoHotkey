@@ -3997,7 +3997,7 @@ void Object::CreateRootPrototypes()
 	});
 
 	sStructClass = (Object*)g_script.FindGlobalVar(_T("Struct"), 6)->Object();
-	sStructClass->DefineMethod(_T("At"), new BuiltInFunc {_T("Struct.At"), BIF_StructFromPtr, 2, 2});
+	sStructClass->DefineMethod(_T("At"), new BuiltInFunc {_T("Struct.At"), Struct_At, 2, 2});
 	sPtrPrototype = CreatePrototype(_T("Struct") STRUCT_PTR_CLASS_SUFFIX, sStructPrototype);
 	sPtrClass = CreateClass(sPtrPrototype, sStructClass);
 	sStructClass->DefineClass(STRUCT_PTR_CLASS_NAME, sPtrClass, true);
