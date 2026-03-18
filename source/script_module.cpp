@@ -337,6 +337,8 @@ ResultType Script::ResolveImports(ScriptImport &imp, ScriptModule *aDirectiveLis
 				while (IS_SPACE_OR_TAB(c)) c = *++cp; // Find next non-whitespace.
 				int at;
 				auto exported = imp.mod->mVars.Find(mod_name, &at);
+				if (!exported && imp.mod->mIsBuiltinModule)
+					exported = g_script.FindOrAddBuiltInVar(mod_name, true, nullptr);
 				if (!exported)
 				{
 					// Since ResolveImports() does everything in one stage, imported names for some
