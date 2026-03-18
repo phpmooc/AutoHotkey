@@ -268,6 +268,8 @@ ResultType Script::ResolveImports(ScriptImport &imp, ScriptModule *aDirectiveLis
 		{
 			if (m->mSelfFileIndex == file_index)
 			{
+				if (!new_last) // A file with no #modules
+					new_last = m; // should still resolve :__Init.
 				imp.mod = m;
 				break;
 			}
