@@ -602,7 +602,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	// or more of the time.  But don't consider the modifiers themselves to have
 	// been modified by a prefix key, since that is almost never desirable:
 	if (   pPrefixKey && pPrefixKey != &this_key && !aKeyUp // There is a prefix key being held down and the user has now pressed some other key.
-		&& pPrefixKey->was_just_used != AS_PASSTHROUGH_PREFIX // v1.1.34.02: Retain this value for prefix key-up.
+		&& pPrefixKey->was_just_used == 0 // v2.0.22: AS_PREFIX_FOR_HOTKEY must take precedence over AS_PREFIX for CapsLock handling. v1.1.34.02: Retain AS_PASSTHROUGH_PREFIX for prefix key-up.
 		&& ((aHook == g_KeybdHook) ? !this_key.as_modifiersLR : pPrefixKey->as_modifiersLR)  )
 			pPrefixKey->was_just_used = AS_PREFIX; // Indicate that currently-down prefix key has been "used".
 	// Formerly, the above was done only for keyboard hook, not the mouse.  This was because
