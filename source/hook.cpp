@@ -718,7 +718,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	if (this_key.used_as_prefix && !aKeyUp && (!pPrefixKey || !this_key.used_as_suffix || &this_key == pPrefixKey))
 	{
 		// v1.0.41: Even if this prefix key is non-suppressed (passes through to active window),
-		// still call PrefixHasNoEnabledSuffixes() because don't want to overwrite the old value of
+		// still call PrefixHasEnabledSuffixes() because don't want to overwrite the old value of
 		// pPrefixKey (see comments in "else" later below).
 		// v1.0.44: Added check for PREFIX_ACTUAL so that a PREFIX_FORCED prefix will be considered
 		// a prefix even if it has no suffixes.  This fixes an unintentional change in v1.0.41 where
@@ -728,9 +728,9 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		// key even if it never acts as a prefix for other keys, which in turn has the benefit of firing
 		// on key-up, but only if the no other key was pressed while the user was holding it down.
 		bool suppress_this_prefix = !(this_key.no_suppress & AT_LEAST_ONE_COMBO_HAS_TILDE); // Set default.
-		bool has_no_enabled_suffixes;
-		if (   !(has_no_enabled_suffixes = (this_key.used_as_prefix == PREFIX_ACTUAL)
-			&& Hotkey::PrefixHasNoEnabledSuffixes(sc_takes_precedence ? aSC : aVK, sc_takes_precedence, suppress_this_prefix))   )
+		bool has_enabled_suffixes = (this_key.used_as_prefix == PREFIX_ACTUAL)
+			&& Hotkey::PrefixHasEnabledSuffixes(sc_takes_precedence ? aSC : aVK, sc_takes_precedence, suppress_this_prefix);
+		if (has_enabled_suffixes)
 		{
 			// This check is necessary in cases such as the following, in which the "A" key continues
 			// to repeat because pressing a mouse button (unlike pressing a keyboard key) does not
@@ -805,23 +805,37 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 						//     the prefix key was used to activate a custom combo.
 						//  3) A key-down hotkey without ~ fires immediately instead of on release.
 						//  4) A key-up hotkey without ~ fires even if the prefix key was used to activate a custom combo.
+						bool up_no_suppress = false;
+						HotkeyVariant *firing_up = nullptr;
 						if (hotkey_id_with_flags < Hotkey::sHotkeyCount && hotkey_up[hotkey_id_with_flags] != HOTKEY_ID_INVALID)
 						{
-							// This key-down hotkey has a key-up counterpart.
-							fire_with_no_suppress = false; // Reset for the call below.
-							auto firing_up = Hotkey::CriterionFiringIsCertain(hotkey_up[hotkey_id_with_flags], aKeyUp, aExtraInfo, fire_with_no_suppress, NULL);
-							if (  !(firing_up && fire_with_no_suppress)  ) // Both key-down and key-up are either ineligible or lack the no-suppress prefix.
-								hotkey_id_with_flags = HOTKEY_ID_INVALID; // See comments above about resetting the ID.
-							else if (firing_is_certain) // Both key-down and key-up are eligible, but key-down should be suppressed.
-								fire_with_no_suppress = false; // For backward-compatibility, suppress the key-down but leave hotkey_id_with_flags set so it fires immediately.
-							else // Key-down is not eligible, but key-up is.
-							{
-								firing_is_certain = firing_up;
-								hotkey_id_with_flags = hotkey_up[hotkey_id_with_flags];
-							}
+							firing_up = Hotkey::CriterionFiringIsCertain(hotkey_up[hotkey_id_with_flags], aKeyUp, aExtraInfo, up_no_suppress, NULL);
+						}
+						if (firing_is_certain && firing_up) // Key-down and key-up are both eligible.
+						{
+							if (has_enabled_suffixes)
+								hotkey_id_with_flags = HOTKEY_ID_INVALID; // Fire both on release.
+						}
+						else if (firing_up && up_no_suppress) // Key-up is eligible and has ~.
+						{
+							firing_is_certain = firing_up;
+							hotkey_id_with_flags = hotkey_up[hotkey_id_with_flags];
+							fire_with_no_suppress = true;
 						}
 						else
-							hotkey_id_with_flags = HOTKEY_ID_INVALID; // See comments above about resetting the ID.
+						{
+							if (hotkey_id_with_flags < Hotkey::sHotkeyCount && IsNeutralModifierVK(Hotkey::shk[hotkey_id_with_flags]->mVK))
+								// Neutral modifiers always fire on release, but are not suppressed.
+								fire_with_no_suppress = true;
+							// This covers three cases:
+							//  1) Key-down is eligible but lacks ~, so should postpone until release
+							//     if there are enabled suffixes or this is a neutral modifier.
+							//  2) Key-up is eligible but lacks ~, so should fire only if a combo is used,
+							//     but hotkey_to_fire_upon_release would cause it to fire unconditionally.
+							//  3) Neither one is eligible to fire.
+							if (!firing_is_certain || has_enabled_suffixes || fire_with_no_suppress)
+								hotkey_id_with_flags = HOTKEY_ID_INVALID;
+						}
 					}
 				}
 				if (hotkey_id_with_flags & HOTKEY_KEY_UP)
@@ -849,7 +863,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 
 		if (hotkey_id_with_flags == HOTKEY_ID_INVALID)
 		{
-			if (has_no_enabled_suffixes)
+			if (!has_enabled_suffixes && this_key.used_as_prefix == PREFIX_ACTUAL)
 				pKeyHistoryCurr->event_type = _T('#'); // '#' to indicate this prefix key is disabled due to #HotIf WinActive/Exist criterion.
 			// In this case, a key-down event can't trigger a suffix, so return immediately.
 			// If our caller is the mouse hook, both of the following will always be false:
@@ -869,24 +883,11 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	}
 
 	//////////////////////////////////////////////////////////////////////////////////
-	// CASE #2 of 4: SUFFIX key (that's not a prefix, or is one but has just been used
-	// in its capacity as a suffix instead) has been released.
-	// This is done before Case #3 for performance reasons.
+	// CASE #2 of 4: SUFFIX key (that's not a prefix) has been released.
 	//////////////////////////////////////////////////////////////////////////////////
-	// v1.0.37.05: Added "|| down_performed_action" to the final check below because otherwise a
-	// script such as the following would send two M's for +b, one upon down and one upon up:
-	// +b::Send, M
-	// b & z::return
-	// Although the final suppress/allow determination could be based on hotkey_down_was_suppressed,
-	// the entry condition must be based on down_performed_action, otherwise the issue described above
-	// would occur for non-suppressed versions of those hotkeys.
-	// I don't remember exactly what the "pPrefixKey != &this_key" check is for below, but it is kept
-	// to minimize the chance of breaking other things:
-	bool fell_through_from_case2 = false; // Set default.
-	if (this_key.used_as_suffix && aKeyUp && (pPrefixKey != &this_key || down_performed_action)) // Note: hotkey_id_with_flags might be already valid due to this_key.hotkey_to_fire_upon_release.
+	// This case just returns early if there's no chance of a key-up hotkey firing.
+	if (this_key.used_as_suffix && aKeyUp && !this_key.used_as_prefix) // Note: hotkey_id_with_flags might be already valid due to this_key.hotkey_to_fire_upon_release.
 	{
-		if (pPrefixKey == &this_key) // v1.0.37.05: Added so that scripts such as the example above don't leave pPrefixKey wrongly non-NULL.
-			pPrefixKey = NULL;       // Also, it seems unnecessary to check this_key.it_put_alt_down and such like is done in Case #3.
 		// If it did perform an action, suppress this key-up event.  Do this even
 		// if this key is a modifier because it's previous key-down would have
 		// already been suppressed (since this case is for suffixes that aren't
@@ -928,7 +929,6 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			return (down_performed_action && !fire_with_no_suppress) ? SuppressThisKey : AllowKeyToGoToSystem;
 		//else continue checking to see if the right modifiers are down to trigger one of this
 		// suffix key's key-up hotkeys.
-		fell_through_from_case2 = true;
 	}
 
 	//////////////////////////////////////////////
@@ -1001,10 +1001,6 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 				// Otherwise:
 				return SuppressThisKey;
 			}
-
-		// v1.0.41: This spot cannot be reached when a disabled prefix key's up-action fires on
-		// key-down instead (via Case #1).  This is because upon release, that prefix key would be
-		// returned from in Case #2 (by virtue of its check of down_performed_action).
 
 		// Since above didn't return, this key-up for this prefix key wasn't used in it's role
 		// as a prefix.  If it's not a suffix, we're done, so just return.  Don't do
@@ -1305,10 +1301,13 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			if (aKeyUp)
 			{
 				// The hotkey found above should fire if it's a prefix key and wasn't fired on key-down.
+				bool fire_down_hotkey = this_key.used_as_prefix
+					&& this_key.was_just_used == 0
+					&& !down_performed_action;
 				// Otherwise, check for a key-up hotkey to fire instead.
 				if (hotkey_id_temp < Hotkey::sHotkeyCount && hotkey_up[hotkey_id_temp] != HOTKEY_ID_INVALID) // Relies on short-circuit boolean order.
 				{
-					if (  fell_through_from_case2
+					if (  !fire_down_hotkey
 						|| !(firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, aExtraInfo, fire_with_no_suppress, &pKeyHistoryCurr->event_type))  )
 					{
 						// The key-down hotkey isn't eligible for firing, so fall back to the key-up hotkey:
@@ -1323,7 +1322,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 					// or via the HOTKEY_KEY_UP flag), don't fire this hotkey when it fell through from Case #2.
 					// This prevents a hotkey like $^b from firing TWICE (once on down and again on up) when a
 					// key-up hotkey with different modifiers also exists, such as "#b" and "#b up" existing with $^b.
-					if (fell_through_from_case2)
+					if (!fire_down_hotkey)
 						hotkey_id_with_flags = HOTKEY_ID_INVALID;
 			}
 			else // hotkey_id_with_flags contains the down-hotkey that is now eligible for firing. But check if there's an up-event to queue up for later.
@@ -3236,22 +3235,11 @@ void SetModifierAsPrefix(vk_type aVK, sc_type aSC, bool aAlwaysSetAsPrefix = fal
 		case VK_SHIFT:
 		case VK_CONTROL:
 			// Since the user is configuring both the left and right counterparts of a key to perform a suffix action,
-			// it seems best to always consider those keys to be prefixes so that their suffix action will only fire
+			// it seems best to tentatively consider those keys to be prefixes so that their suffix action will only fire
 			// when the key is released.  That way, those keys can still be used as normal modifiers.
-			// UPDATE for v1.0.29: But don't do it if there is a corresponding key-up hotkey for this neutral
-			// modifier, which allows a remap such as the following to succeed:
-			// Control::Send {LWin down}
-			// Control up::Send {LWin up}
-			if (!aAlwaysSetAsPrefix)
-			{
-				for (int i = 0; i < Hotkey::sHotkeyCount; ++i)
-				{
-					Hotkey &h = *Hotkey::shk[i]; // For performance and convenience.
-					if (h.mVK == aVK && h.mKeyUp && !h.mModifiersConsolidatedLR && !h.mModifierVK && !h.mModifierSC
-						&& !h.IsCompletelyDisabled())
-						return; // Since caller didn't specify aAlwaysSetAsPrefix==true, don't make this key a prefix.
-				}
-			}
+			// UPDATE for v2.0.22: This section no longer aborts if there is an enabled key-up counterpart hotkey,
+			// since the hook is better able to determine whether the key-up hotkey will actually fire (in which
+			// case the key-down hotkey should fire immediately rather than on key-up).
 			switch (aVK)
 			{
 			case VK_MENU:
@@ -3281,7 +3269,7 @@ void SetModifierAsPrefix(vk_type aVK, sc_type aSC, bool aAlwaysSetAsPrefix = fal
 		default:  // vk is a left/right modifier key such as VK_LCONTROL or VK_LWIN:
 			if (aAlwaysSetAsPrefix)
 				kvk[aVK].used_as_prefix = PREFIX_ACTUAL;
-			else
+			else // Review needed: this is probably not needed:
 				if (Hotkey::FindHotkeyContainingModLR(kvk[aVK].as_modifiersLR)) // Fixed for v1.0.35.13 (used to be aSC vs. aVK).
 					kvk[aVK].used_as_prefix = PREFIX_ACTUAL;
 				// else allow its suffix action to fire when key is pressed down,
@@ -3295,7 +3283,7 @@ void SetModifierAsPrefix(vk_type aVK, sc_type aSC, bool aAlwaysSetAsPrefix = fal
 	// Since above didn't return, using scan code instead of virtual key:
 	if (aAlwaysSetAsPrefix)
 		ksc[aSC].used_as_prefix = PREFIX_ACTUAL;
-	else
+	else // Review needed: this is probably not needed:
 		if (Hotkey::FindHotkeyContainingModLR(ksc[aSC].as_modifiersLR))
 			ksc[aSC].used_as_prefix = PREFIX_ACTUAL;
 }
