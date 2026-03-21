@@ -957,32 +957,18 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 				KeyEvent(KEYDOWNANDUP, aVK, aSC);
 				return SuppressThisKey;
 			}
-
-			// Otherwise, if it was used to modify a non-suffix key, or it was just
-			// pressed and released without any keys in between, don't suppress its up-event
-			// at all.  UPDATE: Don't return here if it didn't modify anything because
-			// this prefix might also be a suffix. Let later sections handle it then.
-			if (this_key.was_just_used == AS_PREFIX)
-				return AllowKeyToGoToSystem;
 		}
-		else // It's not a toggleable key, or it is but it's being kept forcibly on or off.
-			// If the user pressed any non-modifier key while this prefix key was held down
-			// (and it wasn't already determined that a hotkey should fire, such as because
-			// other modifiers are being held down), return early to avoid using this prefix
-			// in its role as a suffix.
-			if (this_key.was_just_used > 0  // AS_PREFIX or AS_PREFIX_FOR_HOTKEY.  v1.1.34.02: Excludes AS_PASSTHROUGH_PREFIX, which would indicate the prefix key's suffix hotkey should always fire.
-				&& hotkey_id_with_flags == HOTKEY_ID_INVALID) // v1.0.44.04: Must check this because this prefix might be being used in its role as a suffix instead.  At this point id is only set if modifiers are held down.
-				return this_key.hotkey_down_was_suppressed ? SuppressThisKey : AllowKeyToGoToSystem;
 
-		// Since above didn't return, this key-up for this prefix key wasn't used in it's role
-		// as a prefix.  If it's not a suffix, we're done, so just return.  Don't do
-		// "DisguiseWinAlt" because we want the key's native key-up function to take effect.
-		// Also, allow key-ups for toggleable keys that the user wants to be toggleable to
-		// go through to the system, because the prior key-down for this prefix key
-		// wouldn't have been suppressed and thus this up-event goes with it (and this
-		// up-event is also needed by the OS, at least WinXP, to properly set the indicator
-		// light and toggle state):
-		if (!this_key.used_as_suffix)
+		// If the user pressed any non-modifier key while this prefix key was held down
+		// (and it wasn't already determined that a hotkey should fire, such as because
+		// other modifiers are being held down), return early to avoid using this prefix
+		// in its role as a suffix.
+		// If the key isn't used as a suffix, we're done, so also return in that case.
+		// Don't do "DisguiseWinAlt" because we want the key's native key-up function to
+		// take effect if the event isn't being suppressed.
+		if ((this_key.was_just_used > 0 // AS_PREFIX or AS_PREFIX_FOR_HOTKEY.  v1.1.34.02: Excludes AS_PASSTHROUGH_PREFIX, which would indicate the prefix key's suffix hotkey should always fire.
+			|| !this_key.used_as_suffix)
+			&& hotkey_id_with_flags == HOTKEY_ID_INVALID) // v1.0.44.04: Must check this because this prefix might be being used in its role as a suffix instead.  At this point id is only set if modifiers are held down.
 			// For simplicity and to ensure consistency with the used_as_suffix == true case,
 			// don't reevaluate the conditions which were already evaluated on key-down.
 			return this_key.hotkey_down_was_suppressed ? SuppressThisKey : AllowKeyToGoToSystem;
