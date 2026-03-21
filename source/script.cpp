@@ -1886,14 +1886,13 @@ process_completed_line:
 		if (!hotstring_start) // Not a hotstring (hotstring_start is checked *again* in case above block changed it; otherwise hotkeys like ": & x" aren't recognized).
 		{
 			// Note that there may be an action following the HOTKEY_FLAG (on the same line).
-			if (hotkey_flag = _tcsstr(buf, HOTKEY_FLAG)) // Find the first one from the left, in case there's more than 1.
+			if (hotkey_flag = _tcsstr(buf + 1, HOTKEY_FLAG)) // Find the first one from the left, in case there's more than 1.
 			{
-				if (hotkey_flag == buf && hotkey_flag[2] == ':') // v1.0.46: Support ":::" to mean "colon is a hotkey".
-					++hotkey_flag;
-					// Above: Hotkeys like "^:::" and "l & :::" are not supported because: 1) some cases are
-					// ambiguous, such as "^:::" legitimately remapping caret to colon; 2) retaining support
-					// for colon as a remap target would require larger/more complicated code; 3) such hotkeys
-					// are hard for a human to read/interpret.
+				// Above: The search starts from + 1 to support ":::" to define colon as a hotkey.
+				// Hotkeys like "^:::" and "l & :::" are not supported because: 1) some cases are
+				// ambiguous, such as "^:::" legitimately remapping caret to colon; 2) retaining support
+				// for colon as a remap target would require larger/more complicated code; 3) such hotkeys
+				// are hard for a human to read/interpret.
 				// v1.0.40: It appears to be a hotkey, but validate it as such before committing to processing
 				// it as a hotkey.  If it fails validation as a hotkey, treat it as a command that just happens
 				// to contain a double-colon somewhere.  This avoids the need to escape double colons in scripts.
