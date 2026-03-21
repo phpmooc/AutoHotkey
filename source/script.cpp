@@ -3279,8 +3279,9 @@ ResultType Script::GetLineContinuation(TextStream *fp, LineBuffer &buf, LineBuff
 		}
 		else if (cp_length)
 		{
-			tmemcpy(buf + buf_length, cp, cp_length + 1); // Append this line to prev. and include the zero terminator.
+			tmemcpy(buf + buf_length, cp, cp_length); // Append this line to prev.
 			buf_length += cp_length; // Must be done only after the old value of buf_length was used above.
+			buf[buf_length] = '\0'; // Null-terminator isn't done by tmemcpy() because cp_length might have been adjusted to omit trailing whitespace.
 		}
 	} // for() each sub-line (continued line) that composes this line.
 	return OK;
