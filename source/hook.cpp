@@ -3182,23 +3182,12 @@ void SetModifierAsPrefix(vk_type aVK, sc_type aSC, bool aAlwaysSetAsPrefix = fal
 		default:  // vk is a left/right modifier key such as VK_LCONTROL or VK_LWIN:
 			if (aAlwaysSetAsPrefix)
 				kvk[aVK].used_as_prefix = PREFIX_ACTUAL;
-			else // Review needed: this is probably not needed:
-				if (Hotkey::FindHotkeyContainingModLR(kvk[aVK].as_modifiersLR)) // Fixed for v1.0.35.13 (used to be aSC vs. aVK).
-					kvk[aVK].used_as_prefix = PREFIX_ACTUAL;
-				// else allow its suffix action to fire when key is pressed down,
-				// under the fairly safe assumption that the user hasn't configured
-				// the opposite key to also be a key-down suffix-action (but even
-				// if the user has done this, it's an explicit override of the
-				// safety checks here, so probably best to allow it).
 		}
 		return;
 	}
 	// Since above didn't return, using scan code instead of virtual key:
 	if (aAlwaysSetAsPrefix)
 		ksc[aSC].used_as_prefix = PREFIX_ACTUAL;
-	else // Review needed: this is probably not needed:
-		if (Hotkey::FindHotkeyContainingModLR(ksc[aSC].as_modifiersLR))
-			ksc[aSC].used_as_prefix = PREFIX_ACTUAL;
 }
 
 
