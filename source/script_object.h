@@ -267,6 +267,7 @@ struct TypedProperty
 //#define ObjParseIntKey(s, endptr) Exp32or64(UorA(wcstol,strtol),UorA(_wcstoi64,_strtoi64))(s, endptr, 10) // Convert string to IntKeyType, setting errno = ERANGE if overflow occurs.
 #define ObjParseIntKey(s, endptr) UorA(_wcstoi64,_strtoi64)(s, endptr, 10) // Convert string to IntKeyType, setting errno = ERANGE if overflow occurs.
 
+struct DYNAPARM;
 class Array;
 
 class Object : public ObjectBase
@@ -327,6 +328,9 @@ protected:
 		size_t align;
 		size_t nested_count;
 		Object *pointed_class;
+		MdType native_type;
+		UCHAR dllcall_type;
+		bool is_unsigned;
 	};
 
 	enum EnumeratorType
@@ -535,7 +539,7 @@ public:
 	bool DefineMethod(name_t aName, IObject *aFunc);
 	void DefineClass(name_t aName, Object *aClass, bool aIsStructPtrClass = false);
 	
-	static void CreatePtrClass(LPTSTR aClassName, Object *aClass);
+	static void CreatePtrClass(LPTSTR aClassName, Object *aClass, StructInfo *aNative = nullptr);
 
 	bool CanSetBase(Object *aNewBase);
 	ResultType SetBase(Object *aNewBase, ResultToken &aResultToken);
@@ -604,16 +608,7 @@ public:
 	UINT_PTR StructSize() { return (mFlags & DataIsStructInfo) ? ((StructInfo*)mData)->size : mBase ? mBase->StructSize() : 0; }
 	UINT_PTR LockStructSize() { auto si = GetStructInfo(); return si ? si->size : 0; }
 	
-	bool GetStructArgInfo(int &aSize, Object *&aPointedClass)
-	{
-		if (auto si = GetStructInfo())
-		{
-			aSize = (int)si->size;
-			aPointedClass = si->pointed_class;
-			return true;
-		}
-		return false;
-	}
+	bool GetStructArgInfo(DYNAPARM &aType, Object *&aPointedClass);
 
 	// Methods and functions:
 	void DeleteProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);

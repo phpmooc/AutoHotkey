@@ -1501,7 +1501,7 @@ Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype
 	return class_obj;
 }
 
-void Object::CreatePtrClass(LPTSTR aClassName, Object *aClass)
+void Object::CreatePtrClass(LPTSTR aClassName, Object *aClass, StructInfo *aNative)
 {
 	auto len = _tcslen(aClassName);
 	auto buf = len ? (LPTSTR)_malloca((len + _countof(STRUCT_PTR_CLASS_SUFFIX)) * sizeof(TCHAR)) : nullptr;
@@ -1520,12 +1520,18 @@ void Object::CreatePtrClass(LPTSTR aClassName, Object *aClass)
 	auto tp = ptr_pro->DefineTypedProperty(_T("Value"));
 	tp->type = MdType::IntPtr;
 	tp->class_object = nullptr;
+	tp->pointed_proto = nullptr;
 	tp->item_count = 0;
 	tp->data_offset = 0;
 	auto si = ptr_pro->GetStructInfo(true);
 	si->align = si->size = sizeof(void*);
 	si->nested_count = 1;
 	si->pointed_class = aClass;
+	if (aNative)
+	{
+		si->dllcall_type = aNative->dllcall_type;
+		si->is_unsigned = aNative->is_unsigned;
+	}
 	ObjectMember members[]{
 		Object_Member(__Value, StructPtrInvoke, 0, IT_SET)
 	};
@@ -1812,8 +1818,16 @@ FResult Object::DefineTypedProperty(name_t aName, MdType aType, Object *aClass, 
 		{
 			if (psi = ((Object*)proto)->GetStructInfo())
 			{
-				psize = psi->size;
-				palign = psi->align;
+				if (psi->native_type != MdType::Void)
+				{
+					aClass = nullptr;
+					aType = psi->native_type;
+				}
+				else
+				{
+					psize = psi->size;
+					palign = psi->align;
+				}
 			}
 		}
 	}
@@ -1825,10 +1839,8 @@ FResult Object::DefineTypedProperty(name_t aName, MdType aType, Object *aClass, 
 			palign = aPack ? aPack : 1;
 		}
 	}
-	else
-	{
+	if (!psize)
 		palign = psize = TypeSize(aType);
-	}
 	if (!psize)
 		return FR_E_ARGS;
 	auto si = GetStructInfo(true);
@@ -1873,24 +1885,34 @@ Object::StructInfo *Object::GetStructInfo(bool aDefine)
 	}
 	if (!(mFlags & DataIsStructInfo))
 	{
-		auto bsi = mBase ? mBase->GetStructInfo(false) : nullptr;
+		auto pbsi = mBase ? mBase->GetStructInfo(false) : nullptr;
 		if (mFlags & DataIsSetFlag)
-			return aDefine ? nullptr : bsi;
-		auto si = (StructInfo*)malloc(sizeof(StructInfo));
-		if (!si)
+			return aDefine ? nullptr : pbsi;
+		auto psi = (StructInfo*)malloc(sizeof(StructInfo));
+		if (!psi)
 			return nullptr;
-		if (bsi)
+		auto &si = *psi;
+		if (pbsi)
 		{
-			*si = *bsi;
+			auto &bsi = *pbsi;
+			si.size = bsi.size;
+			si.align = bsi.align;
+			si.nested_count = bsi.nested_count;
+			si.pointed_class = bsi.pointed_class;
+			si.native_type = MdType::Void; // Revert to a normal struct if extending a numeric type.
+			si.dllcall_type = DLL_ARG_INVALID;
 		}
 		else
 		{
-			si->size = 0;
-			si->align = 1;
-			si->nested_count = 0;
-			si->pointed_class = nullptr;
+			si.size = 0;
+			si.align = 1;
+			si.native_type = MdType::Void;
+			si.dllcall_type = DLL_ARG_INVALID;
+			si.is_unsigned = false;
+			si.nested_count = 0;
+			si.pointed_class = nullptr;
 		}
-		mData = si;
+		mData = &si;
 		mFlags |= DataIsStructInfo | DataIsAllocatedFlag;
 	}
 	return (StructInfo*)mData;
@@ -4001,6 +4023,28 @@ void Object::CreateRootPrototypes()
 	sPtrPrototype = CreatePrototype(_T("Struct") STRUCT_PTR_CLASS_SUFFIX, sStructPrototype);
 	sPtrClass = CreateClass(sPtrPrototype, sStructClass);
 	sStructClass->DefineClass(STRUCT_PTR_CLASS_NAME, sPtrClass, true);
+
+	LPTSTR const type_names[]{ _T("Float32"), _T("Float64"), _T("Int16"), _T("Int32"), _T("Int64"), _T("Int8"), _T("IntPtr"), _T("UInt16"), _T("UInt32"), _T("UInt8")};
+	MdType const type_codes[]{ MdType::Float32, MdType::Float64, MdType::Int16, MdType::Int32, MdType::Int64, MdType::Int8, MdType::IntPtr, MdType::UInt16, MdType::UInt32, MdType::UInt8 };
+	UCHAR const type_dllcall[]{ DLL_ARG_FLOAT, DLL_ARG_DOUBLE, DLL_ARG_SHORT, DLL_ARG_INT, DLL_ARG_INT64, DLL_ARG_CHAR, Exp32or64(DLL_ARG_INT,DLL_ARG_INT64), DLL_ARG_SHORT, DLL_ARG_INT, DLL_ARG_CHAR};
+	for (int i = 0; i < _countof(type_names); ++i)
+	{
+		auto p = CreatePrototype(type_names[i], sStructPrototype);
+		auto si = p->GetStructInfo(true);
+		p->mFlags |= StructInfoLocked;
+		si->native_type = type_codes[i];
+		si->dllcall_type = type_dllcall[i];
+		si->is_unsigned = type_names[i][0] == 'U';
+		si->size = TypeSize(type_codes[i]);
+		auto tp = p->DefineTypedProperty(_T("__Value"));
+		tp->type = type_codes[i];
+		tp->class_object = nullptr;
+		tp->pointed_proto = nullptr;
+		tp->item_count = 0;
+		tp->data_offset = 0;
+		auto c = CreateClass(type_names[i], sStructClass, p, nullptr);
+		CreatePtrClass(type_names[i], c, si);
+	}
 
 	GuiControlType::DefineControlClasses();
 	DefineComPrototypeMembers();
