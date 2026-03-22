@@ -12571,7 +12571,8 @@ ResultType Script::PreparseVarRefs()
 		while (auto *unc = mCurrentModule->mUnresolvedBaseClass)
 		{
 			Object *proto, *cls;
-			if (!ResolveBaseClass(unc->name, unc->is_struct, cls, proto))
+			if (!ResolveBaseClass(unc->name, unc->is_struct, cls, proto)
+				|| cls == unc->subclass || cls->IsDerivedFrom(unc->subclass))
 			{
 				mCurrFileIndex = unc->file_index;
 				mCombinedLineNumber = unc->line_number;
