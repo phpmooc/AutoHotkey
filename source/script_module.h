@@ -39,6 +39,7 @@ public:
 	FileIndexType mDirectiveFileIndex = ABSOLUTE_MAX_SOURCE_FILES;
 	bool mExecuted = false;
 	bool mIsBuiltinModule = false;
+	bool mHasWildcardExports = false;
 
 	// #Warn settings
 	WarnMode Warn_LocalSameAsGlobal = WARNMODE_OFF;
@@ -51,6 +52,8 @@ public:
 	ResultType AddFileIndex(FileIndexType aFile);
 
 	IObject *FindGlobalObject(LPCTSTR aName);
+	Var *FindImportedVar(LPCTSTR aName);
+	Var *AddNewImportVar(LPTSTR aVarName, Var *aAliasFor, IObject *aModule, bool aExport);
 
 	ScriptModule() {}
 	ScriptModule(LPCTSTR aName) : mName(aName) {}

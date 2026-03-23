@@ -2398,7 +2398,6 @@ public:
 	ScriptModule *CreateModule(LPCTSTR aName);
 	ResultType ResolveImports(ScriptModule *aTerminator = nullptr);
 	ResultType ResolveImports(ScriptImport &aImport, ScriptModule *aDirectiveList);
-	Var *AddNewImportVar(LPTSTR aVarName, Var *aAliasFor, IObject *aModule, bool aExport);
 	Var *FindImportedVar(LPCTSTR aVarName);
 
 	ResultType DerefInclude(LPTSTR &aOutput, LPCTSTR aBuf);
