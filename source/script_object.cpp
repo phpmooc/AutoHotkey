@@ -437,7 +437,7 @@ ResultType Array::ToStrings(LPTSTR *aStrings, int &aStringCount, int aStringsMax
 
 bool Object::Delete()
 {
-	if (mNested && mNested[0] && mRefCount)
+	if (mNested && mNested[0])
 	{
 		// Let "outer" be mNested[0] and "inner" be the current object.  The circular dependency
 		// is handled by counting inner's reference to outer only while there are external refs
@@ -446,11 +446,15 @@ bool Object::Delete()
 		// Outer's __delete may rely on the inner objects, and yet inner's __delete can't execute
 		// safely if its DataPtr() points to deleted data.  So outer is always destructed first,
 		// and it becomes responsible for recursively destructing inner.
-		mRefCount--; // To reflect that this object doesn't have a counted ref to outer during outer's __delete.
-		if (mNested[0]->Release() == 0)
-			return true; // this was deleted, so don't do mRefCount++.
-		mRefCount++; // Caller will --mRefCount.
-		return false;
+		if (mRefCount)
+		{
+			mRefCount--; // To reflect that this object doesn't have a counted ref to outer during outer's __delete.
+			if (mNested[0]->Release() == 0)
+				return true; // this was deleted, so don't do mRefCount++.
+			mRefCount++; // Caller will --mRefCount.
+			return false;
+		}
+		mRefCount++; // Must be non-zero during __Delete.
 	}
 
 	// __Delete shouldn't be called for Prototype objects.  Although it would be more efficient to
@@ -557,10 +561,13 @@ Object::~Object()
 		if (mFlags & DataIsStructInfo)
 		{
 			auto &si = *(StructInfo*)mData;
-			if (si.pointer_class) // Currently may be unnecessary to check these as they are circular references
-				si.pointer_class->Release(); // which prevent this and the other class from being deleted.
-			if (si.pointed_class)
-				si.pointed_class->Release();
+			// The pointer class holds a counted reference to the pointed class only while
+			// external references to the pointer class exist.  At this stage all external
+			// references to both have been released and pointed_class has been deleted.
+			if (si.pointer_class)
+				si.pointer_class->Delete();
+			//if (si.pointed_class)
+			//	si.pointed_class->Release();
 			if (si.array_class_map)
 				si.array_class_map->Release();
 		}
@@ -1557,14 +1564,15 @@ void Object::CreatePtrClass(ResultToken &aResultToken, ExprTokenType &aToClass, 
 	if (spsi && spsi->pointer_class)
 	{
 		// Return the previously created class.
-		spsi->pointer_class->AddRef();
+		if (++spsi->pointer_class->mRefCount == 1)
+			++sc->mRefCount; // Must AddRef() the pointed class whenever the pointer class becomes ref-counted. 
 		_f_return(spsi->pointer_class);
 	}
 	if (!spsi || !sp->IsDerivedFrom(Object::sStructPrototype))
 		return (void)aResultToken.TypeError(_T("Struct class"), aToClass);
 
 	auto ptr_cls = CreatePtrClass(sc, sp, spsi);
-	ptr_cls->AddRef();
+	//ptr_cls->AddRef(); // mRefCount remains at 1 because we want the corresponding Release() to call Delete().
 	_f_return(ptr_cls);
 }
 
@@ -1577,6 +1585,8 @@ Object *Object::CreatePtrClass(Object *sc, Object *sp, StructInfo *spsi)
 	auto bpc = bsi->pointer_class;
 	if (!bpc)
 		bpc = CreatePtrClass(sc->Base(), bsp, bsi);
+	else if (bpc->mRefCount == 0) // About to become 1.
+		bpc->mNested[0]->mRefCount++; // Must AddRef() the pointed class whenever the pointer class becomes ref-counted. 
 	ASSERT(bpc);
 
 	LPTSTR aClassName = sp->GetOwnPropString(_T("__Class"));
@@ -1594,6 +1604,9 @@ Object *Object::CreatePtrClass(Object *sc, Object *sp, StructInfo *spsi)
 
 	auto ptr_pro = CreatePrototype(class_name, bpc->ClassGetPrototype());
 	auto ptr_cls = CreateClass(ptr_pro, bpc);
+	ptr_cls->mFlags |= StructInfoLocked; // nested_count must remain 0.
+	ptr_cls->mNested = new Object * [1]; // Can't use &si->pointed_class because delete will be called.
+	ptr_cls->mNested[0] = sc;
 	spsi->pointer_class = ptr_cls;
 	auto si = ptr_pro->GetStructInfo(true);
 	si->align = si->size = sizeof(void*);
@@ -1611,6 +1624,7 @@ Object *Object::CreatePtrClass(Object *sc, Object *sp, StructInfo *spsi)
 	};
 	DefineMembers(ptr_pro, class_name, members, _countof(members));
 	ptr_pro->mFlags &= ~NativeClassPrototype;
+	ptr_pro->Release();
 	_freea(buf);
 
 	return ptr_cls;
@@ -1645,7 +1659,9 @@ void Object::CreateCArrayClass(ResultToken &aResultToken, ExprTokenType &aOfClas
 	if (map->GetItem(aResultToken, key))
 	{
 		ASSERT(aResultToken.symbol == SYM_OBJECT);
-		aResultToken.object->AddRef();
+		auto ac = (Object*)aResultToken.object;
+		if (++ac->mRefCount == 1)
+			++sc->mRefCount; // Must AddRef() the element class whenever the array class becomes ref-counted. 
 		return;
 	}
 
@@ -1664,6 +1680,11 @@ void Object::CreateCArrayClass(ResultToken &aResultToken, ExprTokenType &aOfClas
 		ac->Release();
 		return (void)aResultToken.MemoryError();
 	}
+	ac->mFlags |= StructInfoLocked; // nested_count must remain 0.
+	ac->mNested = new Object * [1];
+	ac->mNested[0] = sc;
+	ac->mRefCount--;
+	ASSERT(ac->mRefCount == 1); // Only the reference to be returned below is counted.
 
 	sc->AddRef();
 	if (!spsi->item_count)
@@ -2005,6 +2026,8 @@ FResult Object::DefineTypedProperty(name_t aName, MdType aType, Object *aClass, 
 		aClass->AddRef();
 	}
 	tprop->pointed_proto = psi && psi->pointed_class && !psi->item_count ? psi->pointed_class->ClassGetPrototype() : nullptr;
+	if (tprop->pointed_proto)
+		tprop->pointed_proto->AddRef();
 	tprop->item_count = aCount;
 	if (aPack && palign > aPack)
 		palign = aPack;
@@ -2760,6 +2783,8 @@ TypedProperty::~TypedProperty()
 {
 	if (class_object)
 		class_object->Release();
+	if (pointed_proto)
+		pointed_proto->Release();
 }
 
 
@@ -4262,7 +4287,7 @@ void Object::CreateRootPrototypes()
 		tp.data_offset = 0;
 		auto &psi = *sPtrPrototype->GetStructInfo(true);
 		psi.align = psi.size = sizeof(void*);
-		psi.pointed_class = sStructClass; // AddRef() not necessary since built-in prototypes are never deleted.
+		psi.pointed_class = sStructClass; // This is not a counted reference.
 		auto &ssi = *sStructPrototype->GetStructInfo(true);
 		ssi.pointer_class = sPtrClass;
 	}

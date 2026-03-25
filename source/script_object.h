@@ -37,7 +37,7 @@ public:
 
 	ULONG STDMETHODCALLTYPE Release()
 	{
-		if (mRefCount == 1)
+		if (mRefCount <= 1) // mRefCount == 0 is a special case used to handle circular references; see Object::Delete().
 		{
 			// If an object is implemented by script, it may need to run cleanup code before the object
 			// is deleted.  This introduces the possibility that before it is deleted, the object ref
