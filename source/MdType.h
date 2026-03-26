@@ -50,7 +50,7 @@ enum class MdType : UINT8
 	LastSupportedPropertyType = Float32
 };
 
-#define MDTYPE_NAMES nullptr, _T("i8"), _T("u8"), _T("i16"), _T("u16"), _T("i32"), _T("u32"), _T("i64"), _T("u64"), _T("f64"), _T("f32")
+#define MDTYPE_NAMES nullptr, _T("i8"), _T("u8"), _T("i16"), _T("u16"), _T("i32"), _T("u32"), _T("i64"), _T("u64"), _T("iptr"), _T("f64"), _T("f32")
 
 #define MdType_IsInt(t) ((t) <= MdType::LastIntType && (t) >= MdType::FirstIntType)
 #define MdType_IsNum(t) ((t) <= MdType::LastNumberType && (t) >= MdType::FirstNumberType)
