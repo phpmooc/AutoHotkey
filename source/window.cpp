@@ -1477,7 +1477,7 @@ ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPCTSTR aT
 			// Besides, even if it's possible for a class name to start with a space, a RegEx dot or other symbol
 			// can be used to match it via SetTitleMatchMode RegEx.
 			start = omit_leading_whitespace(start);
-			if (end == start) // Empty or consists entirely of whitespace.
+			if (end == start || !*start) // Empty or consists entirely of whitespace.
 			{
 				// For backward compatibility, disqualify any title consisting entirely of whitespace,
 				// but otherwise include any trailing whitespace aside from the final delimiting space.
@@ -1579,7 +1579,7 @@ HWND WindowSearch::IsMatch(bool aInvert)
 // called (indirectly) by hook thread too: The hook thread must never call here directly or indirectly with
 // mArray!=NULL because the corresponding section below is probably not thread-safe.
 {
-	if (!mCandidateParent || !mCriteria) // Nothing to check, so no match.
+	if (!mCandidateParent)
 		return NULL;
 
 	// Candidate attributes are retrieved only here when it is known that they will actually be used,
@@ -1615,7 +1615,7 @@ HWND WindowSearch::IsMatch(bool aInvert)
 		mCandidateInfo |= CRITERION_TITLE;
 	}
 
-	if ((mCriteria & CRITERION_TITLE) && *mCriterionTitle) // For performance, avoid the calls below (especially RegEx) when mCriterionTitle is blank (assuming it's even possible for it to be blank under these conditions).
+	if (mCriteria & CRITERION_TITLE) // mCriterionTitle is always non-blank when CRITERION_TITLE is present.
 	{
 		switch(mSettings->TitleMatchMode)
 		{
