@@ -2625,10 +2625,9 @@ ResultType Script::ParseRemap(LPCTSTR aSource, vk_type remap_dest_vk, LPCTSTR aD
 				*next_blind_mod++ = mod_string[i*2+1]; // One of ^!+#
 			}
 	*next_blind_mod = '\0';
-	LPTSTR extra_event = _T(""); // Set default.
 	cp += _stprintf(cp
-		, _T("Send(\"{Blind%s}%s%s{%s%s}\")") // DownR vs. Down. See Send's DownR handler for details.
-		, blind_mods, extra_event, remap_dest_modifiers, remap_dest, remap_wheel ? _T("") : _T(" DownR"));
+		, _T("Send(\"{Blind%s}%s{%s%s}\")") // DownR vs. Down. See Send's DownR handler for details.
+		, blind_mods, remap_dest_modifiers, remap_dest, remap_wheel ? _T("") : _T(" DownR"));
 
 	auto define_remap_func = [&]()
 		{
