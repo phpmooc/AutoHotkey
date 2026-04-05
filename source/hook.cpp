@@ -746,9 +746,6 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 				// key2 is both a prefix and a suffix, we want to leave key1 in effect as a prefix,
 				// rather than key2.  Hence, a null-check was added in the above if-stmt:
 				pPrefixKey = &this_key;
-				// It seems easier (and may perform better than alternative ways) to init this
-				// here rather than say, upon the release of the prefix key:
-				this_key.was_just_used = 0; // Init to indicate it hasn't yet been used in its role as a prefix.
 			}
 		}
 		//else this prefix has no enabled suffixes, so its role as prefix is also disabled.
@@ -948,6 +945,12 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			KeyEvent(KEYUP, VK_SHIFT);
 		}
 
+		auto was_just_used = this_key.was_just_used;
+		// Reset this on key-up, since next time it is pressed might not be as a prefix,
+		// such as with combinations like a & b, b & a, a up, b up, where pressing "a & b"
+		// would consult b.was_just_used on key-up.
+		this_key.was_just_used = 0;
+
 		if (this_toggle_key_can_be_toggled // Always false if our caller is the mouse hook.
 			&& !down_was_suppressed)
 		{
@@ -963,7 +966,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// Toggle the key by replacing this key-up event with a new sequence
 			// of our own.  This entire-replacement is done so that the system
 			// will see all three events in the right order:
-			if (this_key.was_just_used == AS_PREFIX_FOR_HOTKEY) // If this is true, it's probably impossible for hotkey_id_with_flags to be valid by means of this_key.hotkey_to_fire_upon_release.
+			if (was_just_used == AS_PREFIX_FOR_HOTKEY) // If this is true, it's probably impossible for hotkey_id_with_flags to be valid by means of this_key.hotkey_to_fire_upon_release.
 			{
 				KEYEVENT_PHYS(KEYUP, aVK, aSC); // Mark it as physical for any other hook instances.
 				KeyEvent(KEYDOWNANDUP, aVK, aSC);
@@ -978,7 +981,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		// If the key isn't used as a suffix, we're done, so also return in that case.
 		// Don't do "DisguiseWinAlt" because we want the key's native key-up function to
 		// take effect if the event isn't being suppressed.
-		if ((this_key.was_just_used > 0 // AS_PREFIX or AS_PREFIX_FOR_HOTKEY.  v1.1.34.02: Excludes AS_PASSTHROUGH_PREFIX, which would indicate the prefix key's suffix hotkey should always fire.
+		if ((was_just_used > 0 // AS_PREFIX or AS_PREFIX_FOR_HOTKEY.  v1.1.34.02: Excludes AS_PASSTHROUGH_PREFIX, which would indicate the prefix key's suffix hotkey should always fire.
 			|| !this_key.used_as_suffix)
 			&& hotkey_id_with_flags == HOTKEY_ID_INVALID) // v1.0.44.04: Must check this because this prefix might be being used in its role as a suffix instead.  At this point id is only set if modifiers are held down.
 			// For simplicity and to ensure consistency with the used_as_suffix == true case,
@@ -1256,9 +1259,9 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			if (aKeyUp)
 			{
 				// The hotkey found above should fire if it's a prefix key and wasn't fired on key-down,
-				// unless it was used in a combination or this up event wasn't preceded by a down event.
+				// unless this up event wasn't preceded by a down event.  If the prefix key was combined
+				// with another key, the hook already returned before getting to this point.
 				bool fire_down_hotkey = this_key.used_as_prefix
-					&& this_key.was_just_used == 0
 					&& !down_performed_action
 					&& was_down_before_up;
 				// Otherwise, check for a key-up hotkey to fire instead.
