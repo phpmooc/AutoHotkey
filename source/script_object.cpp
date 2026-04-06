@@ -1571,7 +1571,7 @@ void Object::CreatePtrClass(ResultToken &aResultToken, ExprTokenType &aToClass, 
 	auto sc_ = TokenToObject(aToClass);
 	auto sc = sc_->IsOfType(Object::sPrototype) ? (Object*)sc_ : nullptr;
 	auto sp = sc ? sc->ClassGetPrototype() : nullptr;
-	auto spsi = sp ? sp->GetStructInfo() : nullptr;
+	auto spsi = sp ? sp->GetStructInfo(true) : nullptr;
 	if (spsi && spsi->pointer_class)
 	{
 		// Return the previously created class.
@@ -4329,7 +4329,7 @@ void Object::CreateRootPrototypes()
 		tp->item_count = 0;
 		tp->data_offset = 0;
 		auto c = CreateClass(type_names[i], sStructClass, p, nullptr);
-		CreatePtrClass(c, p, si);
+		//CreatePtrClass(c, p, si);
 		sPrimitiveClass[(int)type_codes[i] - 1] = c;
 	}
 
