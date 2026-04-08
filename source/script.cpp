@@ -814,7 +814,7 @@ void Script::CreateTrayIcon()
 	// for compatibility with VC++ 6.x.  This is also what AutoIt3 uses:
 	mNIC.cbSize = sizeof(NOTIFYICONDATA);  // NOTIFYICONDATA_V1_SIZE
 	mNIC.hWnd = g_hWnd;
-	mNIC.uID = AHK_NOTIFYICON; // This is also used for the ID, see TRANSLATE_AHK_MSG for details.
+	mNIC.uID = AHK_NOTIFYICON; // This is also used for the ID.
 	mNIC.uFlags = NIF_MESSAGE | NIF_TIP | NIF_ICON;
 	mNIC.uCallbackMessage = AHK_NOTIFYICON;
 	mNIC.hIcon = mCustomIconSmall ? mCustomIconSmall : g_IconSmall;

@@ -428,7 +428,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 		++messages_received;
 
 		// For max. flexibility, it seems best to allow the message filter to have the first
-		// crack at looking at the message, before even TRANSLATE_AHK_MSG:
+		// crack at looking at the message:
 		if (g_MsgMonitor.Count() && MsgMonitor(msg.hwnd, msg.message, msg.wParam, msg.lParam, &msg, msg_reply))  // Count is checked here to avoid function-call overhead.
 		{
 			continue; // MsgMonitor has returned "true", indicating that this message should be omitted from further processing.
@@ -440,11 +440,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			// of replying to a message because it has no way of knowing whether the MSG struct
 			// arrived via Post vs. SendMessage.
 		}
-
-		// v1.0.44: There's no reason to call TRANSLATE_AHK_MSG here because all WM_COMMNOTIFY messages
-		// are sent to g_hWnd. Thus, our call to DispatchMessage() later below will route such messages to
-		// MainWindowProc(), which will then call TRANSLATE_AHK_MSG().
-		//TRANSLATE_AHK_MSG(msg.message, msg.wParam)
 
 		switch(msg.message)
 		{
