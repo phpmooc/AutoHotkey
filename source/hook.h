@@ -92,7 +92,7 @@ enum UserMessages {AHK_HOOK_HOTKEY = WM_USER, AHK_HOTSTRING, AHK_USER_MENU, AHK_
 // being able to ensure that it's the foreground window.  That seems unlikely, however, since
 // MessageBox() and the other dialog invocating API calls (for FileSelect/DirSelect) likely
 // ensures its window really exists before dispatching messages.
-#define POST_AHK_DIALOG(timeout) PostMessage(g_hWnd, WM_COMMNOTIFY, AHK_DIALOG, (LPARAM)timeout);
+#define POST_AHK_DIALOG(timeout) PostMessage(g_hWnd, AHK_DIALOG, 0, (WPARAM)timeout);
 
 // Some reasoning behind the below data structures: Could build a new array for [sc][sc] and [vk][vk]
 // (since only two keys are allowed in a ModifierVK/SC combination, only 2 dimensions are needed).
