@@ -337,12 +337,6 @@ protected:
 		bool is_unsigned;
 	};
 
-	enum EnumeratorType
-	{
-		Enum_Properties,
-		Enum_Methods
-	};
-
 	ResultType GetEnumProp(UINT &aIndex, Var *aName, Var *aVal, int aVarCount);
 
 #ifndef _WIN64
@@ -616,9 +610,6 @@ public:
 	void SetDataPtr(UINT_PTR aPtr);
 	FResult GetDataPtr(UINT_PTR &aPtr);
 	FResult AllocDataPtr(UINT_PTR aSize);
-#ifdef ENABLE_OBJALLOCDATA
-	FResult FreeDataPtr();
-#endif
 	UINT_PTR DataPtr() { return (UINT_PTR)mData; }
 	UINT_PTR StructSize();
 	UINT_PTR LockStructSize() { auto si = GetStructInfo(); return si ? si->size : 0; }
