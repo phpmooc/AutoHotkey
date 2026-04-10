@@ -2387,7 +2387,7 @@ ResultType Object::New(ResultToken &aResultToken, Object *proto, ExprTokenType *
 				Release();
 				return aResultToken.MemoryError();
 			}
-			ZeroMemory((void*)DataPtr(), DataSize());
+			ZeroMemory((void*)DataPtr(), si->size);
 		}
 		if (si->nested_count)
 		{

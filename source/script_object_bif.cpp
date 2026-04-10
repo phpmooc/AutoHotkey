@@ -328,12 +328,11 @@ bif_impl FResult ObjAllocData(IObject *aObj, UINT_PTR aSize)
 
 FResult Object::AllocDataPtr(UINT_PTR aSize)
 {
-	auto p = (UINT_PTR*)malloc(sizeof(UINT_PTR) + aSize);
+	auto p = (UINT_PTR*)malloc(aSize);
 	if (!p)
 		return FR_E_OUTOFMEM;
 	if (mFlags & DataIsAllocatedFlag)
 		free(mData);
-	*p = aSize;
 	mData = p;
 	mFlags |= DataIsAllocatedFlag | DataIsSetFlag;
 	return OK;
@@ -344,9 +343,7 @@ bif_impl FResult ObjGetDataSize(IObject *aObj, UINT_PTR &aRetVal)
 {
 	if (!aObj->IsOfType(Object::sPrototype))
 		return FR_E_ARG(0);
-	aRetVal = ((Object*)aObj)->DataSize();
-	if (!aRetVal)
-		aRetVal = ((Object*)aObj)->StructSize();
+	aRetVal = ((Object*)aObj)->StructSize();
 	return OK;
 }
 
