@@ -1709,6 +1709,7 @@ void Object::CreateCArrayClass(ResultToken &aResultToken, ExprTokenType &aOfClas
 		si->nested_count = aCount;
 	}
 	si->size = aCount * sp->LockStructSize();
+	si->align = spsi->align;
 	si->item_count = aCount;
 
 	aResultToken.SetValue(ac);
@@ -4351,7 +4352,7 @@ void Object::CreateRootPrototypes()
 		si->native_type = type_codes[i];
 		si->dllcall_type = type_dllcall[i];
 		si->is_unsigned = type_names[i][0] == 'U';
-		si->size = TypeSize(type_codes[i]);
+		si->align = si->size = TypeSize(type_codes[i]);
 		auto tp = p->DefineTypedProperty(_T("__Value"));
 		tp->type = type_codes[i];
 		tp->class_object = nullptr;
