@@ -276,14 +276,14 @@ UINT64 CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used b
 							TypeError(classname ? classname : _T("Struct"), fr);
 						}
 					}
-					//else an error was already raised.
+					//else an error was already raised.  Copy obj's data anyway (possibly all zeroes),
+					// rather than leaving the return value undefined.
 				}
-				if (obj)
-				{
-					// Copy returned struct by value into the caller-provided space.
-					// obj can be a derived struct class, in which case it must be truncated.
-					memcpy(ret_ptr, (void*)((Object*)result_obj)->DataPtr(), ret.proto->StructSize());
-				}
+				// Copy returned struct by value into the caller-provided space.
+				// obj can be a derived struct class, in which case it must be truncated.
+				memcpy(ret_ptr, (void*)obj->DataPtr(), ret.proto->StructSize());
+				if (obj != result_obj)
+					obj->Release();
 			}
 			else
 				SetValueOfTypeAtPtr(ret_type, ret_ptr, result_token, result_token);
