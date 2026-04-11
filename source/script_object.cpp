@@ -60,7 +60,7 @@ ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 
 
 //
-// Object::Create - Create a new Object given an array of property name/value pairs.
+// Object Construction
 //
 
 void *Object::operator new(size_t aObjectSize)
@@ -155,6 +155,45 @@ Object *Object::CreateStruct(Object *aBase, UINT_PTR aPtr, UINT aFlags, bool aCo
 		ZeroMemory((void*)obj->mData, si.size);
 	obj->SetBase(aBase);
 	return obj;
+}
+
+struct NewInstanceParam
+{
+	NewObjectProc create;
+	Object *prototype;
+};
+
+BIF_DECL(NewInstance)
+{
+	auto &a = *(NewInstanceParam*)aResultToken.func->mData;
+	IObject *cls = ParamIndexToObject(0);
+	Object *proto = cls && cls->IsOfType(Object::sPrototype) ? ((Object*)cls)->ClassGetPrototype() : nullptr;
+	if (proto != a.prototype && !proto->IsDerivedFrom(a.prototype))
+		_f_throw_value(ERR_INVALID_BASE);
+	Object *obj = Object::CreateInstance(a.create, proto);
+	obj->Initialize(aResultToken, aParam + 1, aParamCount - 1);
+}
+
+Object *Object::CreateInstance(NewObjectProc aCreate, Object *aBase)
+{
+	auto &si = *aBase->GetStructInfo(true);
+	void *suffix;
+	auto obj = aCreate(si.size, suffix);
+	if (si.size)
+	{
+		obj->SetDataPtr((UINT_PTR)suffix);
+		ZeroMemory(suffix, si.size);
+	}
+	obj->SetBase(aBase);
+	return obj;
+}
+
+template<class T>
+Object *NewObject(size_t aSuffixSize, void *&aSuffix)
+{
+	auto p = new (aSuffixSize) T();
+	aSuffix = p + 1;
+	return p;
 }
 
 
@@ -1557,8 +1596,19 @@ Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype
 		TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
 		_stprintf(full_name, _T("%s.Call"), aClassName);
 		auto ctor = new BuiltInFunc(SimpleHeap::Alloc(full_name));
-		ctor->mBIF = aFactory.call;
-		ctor->mFID = FID_Object_New;
+		if (aFactory.is_bif)
+		{
+			ctor->mBIF = (BuiltInFunctionType)aFactory.call;
+			ctor->mFID = FID_Object_New;
+		}
+		else
+		{
+			auto a = SimpleHeap::Alloc<NewInstanceParam>();
+			a->create = (NewObjectProc)aFactory.call;
+			a->prototype = aPrototype;
+			ctor->mData = a;
+			ctor->mBIF = NewInstance;
+		}
 		ctor->mMinParams = aFactory.min_params; // Usually 1, the class object.
 		ctor->mParamCount = aFactory.max_params;
 		ctor->mIsVariadic = aFactory.is_variadic; // Usually variadic since __new(...) may be redefined/overridden.
@@ -4262,7 +4312,7 @@ void Object::CreateRootPrototypes()
 		{_T("InputHook"), &InputObject::sPrototype, NewObject<InputObject>, {InputObject::sMembers, InputObject::sMemberCount}},
 		{_T("Map"), &Map::sPrototype, NewObject<Map>, Map::sMembers},
 		{_T("Menu"), &UserMenu::sPrototype, NewObject<UserMenu>, {UserMenu::sMembers, UserMenu::sMemberCount}, {
-			{_T("MenuBar"), &UserMenu::sBarPrototype, NewObject<UserMenu::Bar>}
+			{_T("MenuBar"), &UserMenu::sBarPrototype, UserMenu::NewMenuBar}
 		}},
 		{_T("RegExMatchInfo"), &RegExMatchObject::sPrototype, no_ctor, RegExMatchObject::sMembers}
 	});
@@ -4481,7 +4531,13 @@ BIF_DECL(Class_New)
 	// For backward-compatibility, Class() is the same as (Object.Call)(Class).
 	// Class(unset) would have thrown ERR_TOO_MANY_PARAMS, so is exempted from this.
 	if (aParamCount == 1)
-		return NewObject<Object>(aResultToken, aParam, aParamCount);
+	{
+		Object *obj = Object::Create();
+		if (!obj)
+			_f_throw_oom;
+		obj->New(aResultToken, aParam, aParamCount);
+		return;
+	}
 
 	// aParam[0] is implicit and mandatory, as this is a method.  Usually it should be Class itself,
 	// but might be something else if the script explicitly calls (Class.Call)(this) or extends Class

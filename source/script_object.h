@@ -120,12 +120,16 @@ struct ObjectMemberListType
 
 
 // Helper for predefined classes
+typedef Object* (*NewObjectProc)(size_t, void*&);
 struct ClassFactoryDef
 {
-	BuiltInFunctionType call;
+	void *call;
 	UCHAR min_params, max_params, is_variadic;
-	ClassFactoryDef(BuiltInFunctionType aCall, int aMin, int aMax, bool aVariadic = false) : call(aCall), min_params(aMin), max_params(aMax), is_variadic(aVariadic) {}
+	bool is_bif;
+	ClassFactoryDef(BuiltInFunctionType aCall, int aMin, int aMax, bool aVariadic = false) : call(aCall), min_params(aMin), max_params(aMax), is_variadic(aVariadic), is_bif(true) {}
 	ClassFactoryDef(BuiltInFunctionType aCall = nullptr) : ClassFactoryDef(aCall, 1, 1, true) {}
+	ClassFactoryDef(nullptr_t) : ClassFactoryDef((BuiltInFunctionType)nullptr) {}
+	ClassFactoryDef(NewObjectProc aCall, int aMin = 1, int aMax = 1, bool aVariadic = true) : call(aCall), min_params(aMin), max_params(aMax), is_variadic(aVariadic), is_bif(false) {}
 };
 
 
@@ -362,7 +366,7 @@ protected:
 	};
 
 	Object *CloneTo(Object &aTo);
-	Object(UINT aFlags = 0) { mFlags = aFlags; }
+	Object(UINT aFlags) { mFlags = aFlags; }
 	~Object();
 	bool Delete() override;
 
@@ -423,11 +427,13 @@ public:
 	void operator delete(void *p);
 	void operator delete(void *p, size_t);
 
+	Object() { mFlags = 0; }
 	static Object *Create();
 	static Object *Create(ExprTokenType *aParam[], int aParamCount, ResultToken *apResultToken = nullptr);
 	static Object *CreateStruct(Object *aBase, UINT_PTR aPtr = NULL, UINT aFlags = CannotOwnProps, bool aCopy = false);
 	static Object *CreateStructCopyNoDelete(Object *aBase, UINT_PTR aPtr) { return CreateStruct(aBase, aPtr, CannotOwnProps | NoCallDelete, true); }
 	static Object *CreateStructPtr(Object *aBase, UINT_PTR aPtr) { return CreateStruct(aBase, aPtr, CannotOwnProps | NoCallDelete); }
+	static Object *CreateInstance(NewObjectProc aCreate, Object *aBase);
 
 	static ResultType ApplyParams(ResultToken &aThisResultToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
@@ -700,8 +706,6 @@ private:
 
 	index_t ParamToZeroIndex(ExprTokenType &aParam);
 
-	Array() {}
-	
 public:
 	enum : index_t
 	{
@@ -728,6 +732,7 @@ public:
 	bool ItemToToken(index_t aIndex, ExprTokenType &aToken);
 	ResultType GetEnumItem(UINT &aIndex, Var *, Var *, int);
 
+	Array() {}
 	~Array();
 	static Array *Create(ExprTokenType *aValue[] = nullptr, index_t aCount = 0);
 	static Array *FromArgV(LPTSTR *aArgV, int aArgC);
@@ -795,7 +800,6 @@ class Map : public Object
 	static const index_t mKeyOffsetInt = 0;
 	index_t mKeyOffsetObject = 0, mKeyOffsetString = 0;
 
-	Map() {}
 	void Clear();
 	~Map()
 	{
@@ -825,6 +829,7 @@ class Map : public Object
 	ResultType GetEnumItem(UINT &aIndex, Var *, Var *, int);
 
 public:
+	Map() {}
 	static Map *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
 
 	bool HasItem(ExprTokenType &aKey)
@@ -971,13 +976,13 @@ private:
 protected:
 	void *mData;
 	size_t mSize;
-	BufferObject(void *aData = nullptr, size_t aSize = 0) : mData(aData), mSize(aSize) {}
 
 public:
 	void *Data() { return mData; }
 	size_t Size() { return mSize; }
 	ResultType Resize(size_t aNewSize);
 
+	BufferObject(void *aData = nullptr, size_t aSize = 0) : mData(aData), mSize(aSize) {}
 	~BufferObject() { free(mData); }
 
 	enum MemberID
@@ -1002,10 +1007,8 @@ public:
 
 class ClipboardAll : public BufferObject
 {
-private:
-	ClipboardAll() : BufferObject() {}
-
 public:
+	ClipboardAll() : BufferObject() {}
 	static ObjectMember sMembers[];
 	static Object *sPrototype;
 	static Object *Create();

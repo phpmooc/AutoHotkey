@@ -676,7 +676,7 @@ ResultType Script::CreateWindows()
 
 	// Now that all static initializers (such as for Object::sPrototype)
 	// are guaranteed to have been executed, construct the Tray menu.
-	mTrayMenu = new UserMenu(MENU_TYPE_POPUP);
+	mTrayMenu = UserMenu::Create();
 	mTrayMenu->AppendStandardItems();
 
 	// Stdin scripts leave the menu items enabled, to make it easier to imitate a standard script

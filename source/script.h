@@ -1977,8 +1977,21 @@ public:
 	// Don't overload new and delete operators in this case since we want to use real dynamic memory
 	// (since menus can be read in from a file, destroyed and recreated, over and over).
 
-	UserMenu(MenuTypeType aMenuType);
-	static UserMenu *Create() { return new UserMenu(MENU_TYPE_POPUP); }
+	static UserMenu *Create()
+	{
+		auto p = new UserMenu(MENU_TYPE_POPUP);
+		p->SetBase(sPrototype);
+		return p;
+	}
+
+	static Object *NewMenuBar(size_t aSuffixSize, void *&aSuffix)
+	{
+		auto p = new (aSuffixSize) UserMenu(MENU_TYPE_BAR);
+		aSuffix = p + 1;
+		return p;
+	}
+
+	UserMenu(MenuTypeType aMenuType = MENU_TYPE_POPUP);
 	void Dispose();
 	~UserMenu();
 	
@@ -2032,17 +2045,6 @@ public:
 	ResultType SetItemIcon(UserMenuItem *aMenuItem, LPCTSTR aFilename, int aIconNumber, int aWidth);
 	void ApplyItemIcon(UserMenuItem *aMenuItem);
 	void RemoveItemIcon(UserMenuItem *aMenuItem);
-};
-
-class UserMenu::Bar : public UserMenu
-{
-	Bar(const Bar &) = delete; // Never instantiated.
-
-public:
-	static UserMenu *Create()
-	{
-		return new UserMenu(MENU_TYPE_BAR);
-	}
 };
 
 
