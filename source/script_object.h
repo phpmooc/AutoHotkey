@@ -108,9 +108,14 @@ struct ObjectMemberListType
 {
 	ObjectMember *duck = nullptr; // Duck-typed members.
 	ObjectMemberMd *meta = nullptr; // Metadata-based members.
+	int count = 0;
 	ObjectMemberListType() {}
-	ObjectMemberListType(ObjectMember *aList) : duck(aList) {}
-	ObjectMemberListType(ObjectMemberMd *aList) : meta(aList) {}
+	ObjectMemberListType(ObjectMember* aList, int N) : duck(aList), count(N) {}
+	ObjectMemberListType(ObjectMemberMd* aList, int N) : meta(aList), count(N) {}
+	template<size_t N>
+	ObjectMemberListType(ObjectMember(&aList)[N]) : duck(aList), count(N) {}
+	template<size_t N>
+	ObjectMemberListType(ObjectMemberMd(&aList)[N]) : meta(aList), count(N) {}
 };
 
 
@@ -596,7 +601,7 @@ public:
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase = nullptr);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember aMember[], int aMemberCount);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMemberMd aMember[], int aMemberCount);
-	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMemberListType aMember, int aMemberCount);
+	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMemberListType aMember);
 	static Object *DefineMembers(Object *aObject, LPTSTR aClassName, ObjectMember aMember[], int aMemberCount);
 	static Object *DefineMetadataMembers(Object *obj, LPCTSTR aClassName, ObjectMemberMd aMember[], int aMemberCount);
 	static Object *CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype, ClassFactoryDef aFactory);

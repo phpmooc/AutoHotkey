@@ -1474,12 +1474,12 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMemberMd
 	return DefineMetadataMembers(obj, aClassName, aMember, aMemberCount);
 }
 
-Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMemberListType aMember, int aMemberCount)
+Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMemberListType aMember)
 {
 	if (aMember.duck)
-		return CreatePrototype(aClassName, aBase, aMember.duck, aMemberCount);
+		return CreatePrototype(aClassName, aBase, aMember.duck, aMember.count);
 	else
-		return CreatePrototype(aClassName, aBase, aMember.meta, aMemberCount);
+		return CreatePrototype(aClassName, aBase, aMember.meta, aMember.count);
 }
 
 
@@ -4172,7 +4172,6 @@ struct ClassDef
 	Object **proto_var;
 	ClassFactoryDef factory;
 	ObjectMemberListType members;
-	int member_count;
 	std::initializer_list<ClassDef> subclasses;
 };
 
@@ -4181,7 +4180,7 @@ void DefineClasses(Object *aBaseClass, Object *aBaseProto, std::initializer_list
 	for (auto &c : aClasses)
 	{
 		auto proto = (c.proto_var && *c.proto_var) ? *c.proto_var
-			: Object::CreatePrototype(const_cast<LPTSTR>(c.name), aBaseProto, c.members, c.member_count);
+			: Object::CreatePrototype(const_cast<LPTSTR>(c.name), aBaseProto, c.members);
 		if (c.proto_var)
 			*c.proto_var = proto;
 		auto cobj = Object::CreateClass(const_cast<LPTSTR>(c.name), aBaseClass, proto, c.factory);
@@ -4228,51 +4227,44 @@ void Object::CreateRootPrototypes()
 	Object::sObjectCall = Object::sClass->GetOwnPropMethod(_T("Call"));
 
 	ObjectCtor no_ctor = nullptr;
-	ObjectMember *no_members = nullptr;
+	ObjectMemberListType no_members;
 
 	DefineClasses(Object::sClass, Object::sPrototype, {
-		{_T("Array"), &Array::sPrototype, NewObject<Array>
-			, Array::sMembers, _countof(Array::sMembers)},
-		{_T("Buffer"), &BufferObject::sPrototype, NewObject<BufferObject>, BufferObject::sMembers, _countof(BufferObject::sMembers), {
-			{_T("ClipboardAll"), &ClipboardAll::sPrototype, NewObject<ClipboardAll>
-				, ClipboardAll::sMembers, _countof(ClipboardAll::sMembers)}
+		{_T("Array"), &Array::sPrototype, NewObject<Array>, Array::sMembers},
+		{_T("Buffer"), &BufferObject::sPrototype, NewObject<BufferObject>, BufferObject::sMembers, {
+			{_T("ClipboardAll"), &ClipboardAll::sPrototype, NewObject<ClipboardAll>, ClipboardAll::sMembers}
 		}},
 		{_T("Class"), &Object::sClassPrototype, {Class_New, 0, 2, true}},
-		{_T("Error"), &ErrorPrototype::Error, no_ctor, sErrorMembers, _countof(sErrorMembers), {
+		{_T("Error"), &ErrorPrototype::Error, no_ctor, sErrorMembers, {
 			{_T("MemoryError"), &ErrorPrototype::Memory},
-			{_T("OSError"), &ErrorPrototype::OS, no_ctor, sOSErrorMembers, _countof(sOSErrorMembers)},
+			{_T("OSError"), &ErrorPrototype::OS, no_ctor, sOSErrorMembers},
 			{_T("TargetError"), &ErrorPrototype::Target},
 			{_T("TimeoutError"), &ErrorPrototype::Timeout},
 			{_T("TypeError"), &ErrorPrototype::Type},
-			{_T("UnsetError"), &ErrorPrototype::Unset, no_ctor, no_members, 0, {
-				{_T("MemberError"), &ErrorPrototype::Member, no_ctor, no_members, 0, {
+			{_T("UnsetError"), &ErrorPrototype::Unset, no_ctor, no_members, {
+				{_T("MemberError"), &ErrorPrototype::Member, no_ctor, no_members, {
 					{_T("PropertyError"), &ErrorPrototype::Property},
 					{_T("MethodError"), &ErrorPrototype::Method}
 				}},
 				{_T("UnsetItemError"), &ErrorPrototype::UnsetItem}
 			}},
-			{_T("ValueError"), &ErrorPrototype::Value, no_ctor, no_members, 0, {
+			{_T("ValueError"), &ErrorPrototype::Value, no_ctor, no_members, {
 				{_T("IndexError"), &ErrorPrototype::Index}
 			}},
 			{_T("ZeroDivisionError"), &ErrorPrototype::ZeroDivision}
 		}},
-		{_T("Func"), &Func::sPrototype, no_ctor, Func::sMembers, _countof(Func::sMembers), {
+		{_T("Func"), &Func::sPrototype, no_ctor, Func::sMembers, {
 			{_T("BoundFunc"), &BoundFunc::sPrototype},
 			{_T("Closure"), &Closure::sPrototype},
 			{_T("Enumerator"), &EnumBase::sPrototype}
 		}},
-		{_T("Gui"), &GuiType::sPrototype, NewObject<GuiType>
-			, GuiType::sMembers, GuiType::sMemberCount},
-		{_T("InputHook"), &InputObject::sPrototype, NewObject<InputObject>
-			, InputObject::sMembers, InputObject::sMemberCount},
-		{_T("Map"), &Map::sPrototype, NewObject<Map>
-			, Map::sMembers, _countof(Map::sMembers)},
-		{_T("Menu"), &UserMenu::sPrototype, NewObject<UserMenu>
-			, UserMenu::sMembers, UserMenu::sMemberCount, {
+		{_T("Gui"), &GuiType::sPrototype, NewObject<GuiType>, {GuiType::sMembers, GuiType::sMemberCount}},
+		{_T("InputHook"), &InputObject::sPrototype, NewObject<InputObject>, {InputObject::sMembers, InputObject::sMemberCount}},
+		{_T("Map"), &Map::sPrototype, NewObject<Map>, Map::sMembers},
+		{_T("Menu"), &UserMenu::sPrototype, NewObject<UserMenu>, {UserMenu::sMembers, UserMenu::sMemberCount}, {
 			{_T("MenuBar"), &UserMenu::sBarPrototype, NewObject<UserMenu::Bar>}
 		}},
-		{_T("RegExMatchInfo"), &RegExMatchObject::sPrototype, no_ctor
-			, RegExMatchObject::sMembers, _countof(RegExMatchObject::sMembers)}
+		{_T("RegExMatchInfo"), &RegExMatchObject::sPrototype, no_ctor, RegExMatchObject::sMembers}
 	});
 
 	// Parameter counts are specified for static Call in the following classes
@@ -4282,22 +4274,22 @@ void Object::CreateRootPrototypes()
 	// validate aParamCount in each function, which reduces code size.
 	// Note that the `this` parameter (the class itself) is counted.
 	DefineClasses(anyClass, sAnyPrototype, {
-		{_T("ComValue"), &sComValuePrototype, {ComValue_Call, 3, 4}, no_members, 0, {
+		{_T("ComValue"), &sComValuePrototype, {ComValue_Call, 3, 4}, no_members, {
 			{_T("ComObjArray"), &sComArrayPrototype, {ComObjArray_Call, 3, 10}},
 			{_T("ComObject"), &sComObjectPrototype, {ComObject_Call, 2, 3}},
 			{_T("ComValueRef"), &sComRefPrototype}
 		}},
-		{_T("Primitive"), &Object::sPrimitivePrototype, no_ctor, no_members, 0, {
-			{_T("Number"), &Object::sNumberPrototype, {BIF_Number, 2, 2}, no_members, 0, {
+		{_T("Primitive"), &Object::sPrimitivePrototype, no_ctor, no_members, {
+			{_T("Number"), &Object::sNumberPrototype, {BIF_Number, 2, 2}, no_members, {
 				{_T("Float"), &Object::sFloatPrototype, {BIF_Float, 2, 2}},
 				{_T("Integer"), &Object::sIntegerPrototype, {BIF_Integer, 2, 2}}
 			}},
 			{_T("String"), &Object::sStringPrototype, {BIF_String, 2, 2}}
 		}},
 		{_T("Module"), &ScriptModule::sPrototype},
-		{_T("PropRef"), &PropRef::sPrototype, {PropRef_Call, 3, 3}, PropRef::sMembers, _countof(PropRef::sMembers)},
-		{_T("Struct"), &sStructPrototype, NewStruct, sStructMembers, _countof(sStructMembers)},
-		{_T("VarRef"), &sVarRefPrototype, no_ctor, VarRef::sMembers, _countof(VarRef::sMembers)}
+		{_T("PropRef"), &PropRef::sPrototype, {PropRef_Call, 3, 3}, PropRef::sMembers},
+		{_T("Struct"), &sStructPrototype, NewStruct, sStructMembers},
+		{_T("VarRef"), &sVarRefPrototype, no_ctor, VarRef::sMembers}
 	});
 
 	sStructClass = (Object*)g_script.FindGlobalVar(_T("Struct"), 6)->Object();

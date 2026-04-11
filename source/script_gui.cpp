@@ -712,7 +712,7 @@ void GuiControlType::DefineControlClasses()
 
 		// Determine base prototype and control-type-specific members.
 		Object *base_proto = sPrototype, *base_class = ctrl_class;
-		ObjectMemberListType more_items;
+		ObjectMemberMd *more_items = nullptr;
 		int how_many = 0;
 		switch (i)
 		{
