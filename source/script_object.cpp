@@ -146,20 +146,27 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount, ResultToken *ap
 	return obj;
 }
 
-Object *Object::CreateStruct(Object *aBase, UINT_PTR aPtr, UINT aFlags, bool aCopy)
+Object *Object::CreateStruct(Object *aBase, UINT_PTR aPtr, UINT aFlags)
 {
 	auto &si = *aBase->GetStructInfo(true);
-	auto suffix = aPtr && !aCopy ? 0 : si.size;
-	Object *obj = new (suffix) Object(aFlags);
+	Object *obj = new (si.size) Object(aFlags | CannotOwnProps | DataIsSuffix);
 	if (si.size)
 	{
-		void *data = aPtr ? (void*)aPtr : obj + 1;
-		obj->SetDataPtr((UINT_PTR)data);
-		if (aCopy)
+		void *data = obj + 1;
+		if (aPtr)
 			memcpy(data, (void*)aPtr, si.size);
-		else if (!aPtr)
+		else
 			ZeroMemory(data, si.size);
 	}
+	obj->SetBase(aBase);
+	return obj;
+}
+
+Object *Object::CreateStructPtr(Object *aBase, UINT_PTR aPtr, UINT aFlags)
+{
+	auto &si = *aBase->GetStructInfo(true);
+	Object *obj = new (sizeof(void*)) Object(aFlags | CannotOwnProps | DataIsSuffixPtr);
+	*(UINT_PTR*)(obj + 1) = aPtr;
 	obj->SetBase(aBase);
 	return obj;
 }
@@ -182,21 +189,16 @@ void Object::NewInstance(ResultToken &aResultToken, ExprTokenType *aParam[], int
 	auto si = proto ? proto->GetStructInfo(true) : nullptr;
 	if (!si || si->create != nsi->create)
 		_f_throw_value(ERR_INVALID_BASE);
-	Object *obj = CreateInstance(si->create, si->object_size, proto);
-	obj->Initialize(aResultToken, aParam + 1, aParamCount - 1);
-}
 
-Object *Object::CreateInstance(NewObjectProc aCreate, UINT aDataOffset, Object *aBase)
-{
-	auto &si = *aBase->GetStructInfo(true);
-	auto obj = aCreate(si.size);
-	if (si.size)
+	auto obj = si->create(si->size);
+	if (si->size)
 	{
-		obj->SetDataPtr((UINT_PTR)obj + aDataOffset);
-		ZeroMemory(obj->mData, si.size);
+		auto ptr = (UINT_PTR)obj + si->object_size;
+		ZeroMemory((void*)ptr, si->size);
+		obj->mFlags |= DataIsSuffix;
 	}
-	obj->SetBase(aBase);
-	return obj;
+	obj->SetBase(proto);
+	obj->Initialize(aResultToken, aParam + 1, aParamCount - 1);
 }
 
 template<class T>
@@ -935,7 +937,7 @@ Object *Object::GetThisForTypedValue(ResultToken &aResultToken, int aFlags, name
 	auto realthis = this;
 	if (aFlags & (IF_SUBSTITUTE_THIS | IF_SUPER))
 		realthis = dynamic_cast<Object*>(TokenToObject(aThisToken));
-	if (realthis && realthis->mData)
+	if (realthis && realthis->HasData())
 		return realthis;
 	aResultToken.Error(_T("Property invalid for object with null data."), aName);
 	return nullptr;
@@ -1694,6 +1696,7 @@ Object *Object::CreatePtrClass(Object *sc, Object *sp, StructInfo *spsi)
 	si->pointed_class = sc;
 	if (sc)
 		sc->AddRef();
+	si->object_size = sizeof(Object);
 	if (spsi->dllcall_type && !spsi->pointed_class)
 	{
 		si->dllcall_type = spsi->dllcall_type;
@@ -1761,8 +1764,9 @@ void Object::CreateCArrayClass(ResultToken &aResultToken, ExprTokenType &aOfClas
 	ac->mNested[0] = sc;
 	ac->mRefCount--;
 	ASSERT(ac->mRefCount == 1); // Only the reference to be returned below is counted.
-
 	sc->AddRef();
+
+	si->object_size = sizeof(Object);
 	if (!spsi->item_count)
 		si->native_type = spsi->native_type;
 	if (si->native_type == MdType::Void)
@@ -2409,7 +2413,6 @@ ResultType Object::Initialize(ResultToken &aResultToken, ExprTokenType *aParam[]
 {
 	if (auto si = mBase->GetStructInfo(true))
 	{
-		ASSERT(mData || !si->size);
 		if (si->nested_count)
 		{
 			mNested = new (std::nothrow) Object * [si->nested_count + 1];
@@ -2485,7 +2488,7 @@ ResultType Object::NestedNew(ResultToken &aResultToken, StructInfo *si)
 			result = aResultToken.Error(_T("Bad Prototype"), nullptr, ErrorPrototype::Type);
 			break;
 		}
-		auto nested = CreateStruct(proto, data_ptr + offsets[i - 1]);
+		auto nested = CreateStructPtr(proto, data_ptr + offsets[i - 1], 0); // aFlags = 0 so __Delete will be called.
 		result = nested->Initialize(aResultToken, nullptr, 0, this);
 		if (result != OK)
 			break;
@@ -2523,7 +2526,7 @@ ResultType Object::CArrayNew(ResultToken &aResultToken, StructInfo *si)
 	size_t i;
 	for (i = 1; i <= si->nested_count; ++i, data_ptr += item_size)
 	{
-		auto nested = CreateStruct(item_base, data_ptr);
+		auto nested = CreateStructPtr(item_base, data_ptr, 0); // aFlags = 0 so __Delete will be called.
 		result = nested->Initialize(aResultToken, nullptr, 0, this);
 		if (result != OK)
 			break;
@@ -4349,9 +4352,11 @@ void Object::CreateRootPrototypes()
 		auto &psi = *(StructInfo*)(sPtrPrototype + 1);
 		psi.align = psi.size = sizeof(void*);
 		psi.pointed_class = sStructClass; // This is not a counted reference.
+		psi.object_size = sizeof(Object);
 		auto &ssi = *(StructInfo*)(sStructPrototype + 1);
 		ssi.align = 1;
 		ssi.pointer_class = sPtrClass;
+		ssi.object_size = sizeof(Object);
 		++sPtrClass->mRefCount; // For correctness, though it should never be released.
 		sStructPrototype->mFlags |= StructInfoInitialized | StructInfoLocked;
 	}
@@ -4369,6 +4374,7 @@ void Object::CreateRootPrototypes()
 		auto p = CreatePrototype(type_names[i], sStructPrototype);
 		auto si = (StructInfo*)(p + 1);
 		p->mFlags |= StructInfoInitialized | StructInfoLocked;
+		si->object_size = sizeof(Object);
 		si->native_type = type_codes[i];
 		si->dllcall_type = type_dllcall[i];
 		si->is_unsigned = type_names[i][0] == 'U';

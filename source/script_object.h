@@ -363,8 +363,8 @@ protected:
 	{
 		ClassPrototype = 0x01,
 		NativeClassPrototype = 0x02,
-		DataIsSetFlag = 0x04,
-		//unused = 0x08,
+		DataIsSuffix = 0x04,
+		DataIsSuffixPtr = 0x08,
 		StructInfoInitialized = 0x10,
 		StructInfoLocked = 0x20,
 		NoCallDelete = 0x40,
@@ -426,6 +426,8 @@ protected:
 	ResultType NestedSparseInit(ResultToken& aResultToken);
 	ResultType NestedSparseInit(ResultToken& aResultToken, TypedProperty& aProp, UINT_PTR aPtr);
 	ResultType CArrayNew(ResultToken &aResultToken, StructInfo *si);
+	
+	static Object *CreateInstance(Object *aBase, StructInfo &si);
 
 public:
 
@@ -437,10 +439,9 @@ public:
 	Object() { mFlags = 0; }
 	static Object *Create();
 	static Object *Create(ExprTokenType *aParam[], int aParamCount, ResultToken *apResultToken = nullptr);
-	static Object *CreateStruct(Object *aBase, UINT_PTR aPtr = NULL, UINT aFlags = CannotOwnProps, bool aCopy = false);
-	static Object *CreateStructCopyNoDelete(Object *aBase, UINT_PTR aPtr) { return CreateStruct(aBase, aPtr, CannotOwnProps | NoCallDelete, true); }
-	static Object *CreateStructPtr(Object *aBase, UINT_PTR aPtr) { return CreateStruct(aBase, aPtr, CannotOwnProps | NoCallDelete); }
-	static Object *CreateInstance(NewObjectProc aCreate, UINT aDataOffset, Object *aBase);
+	static Object *CreateStruct(Object *aBase, UINT_PTR aPtr = NULL, UINT aFlags = 0);
+	static Object *CreateStructCopyNoDelete(Object *aBase, UINT_PTR aPtr) { return CreateStruct(aBase, aPtr, NoCallDelete); }
+	static Object *CreateStructPtr(Object *aBase, UINT_PTR aPtr, UINT aFlags = NoCallDelete);
 	static void NewInstance(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	static ResultType CreateStruct(ResultToken &aResultToken, Object *aBase, ExprTokenType *aParam[] = nullptr, int aParamCount = 0);
 
@@ -569,6 +570,14 @@ public:
 	static Object *CreatePtrClass(Object *sc, Object *sp, StructInfo *spsi);
 	static void CreateCArrayClass(ResultToken &aResultToken, ExprTokenType &aOfClass, size_t aCount);
 
+	bool HasData() { return mFlags & (DataIsSuffix | DataIsSuffixPtr); }
+	UINT_PTR DataPtr();
+	UINT_PTR StructSize();
+	UINT_PTR LockStructSize() { auto si = GetStructInfo(); return si ? si->size : 0; }
+
+	bool GetStructArgInfo(DYNAPARM &aType, Object *&aPointedClass);
+	MdType GetStructMdType();
+
 	bool CanSetBase(Object *aNewBase);
 	ResultType SetBase(Object *aNewBase, ResultToken &aResultToken);
 	void SetBase(Object *aNewBase)
@@ -626,14 +635,8 @@ public:
 	void GetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	void SetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	void PropCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void SetDataPtr(UINT_PTR aPtr);
+	FResult SetDataPtr(UINT_PTR aPtr);
 	FResult GetDataPtr(UINT_PTR &aPtr);
-	UINT_PTR DataPtr() { return (UINT_PTR)mData; }
-	UINT_PTR StructSize();
-	UINT_PTR LockStructSize() { auto si = GetStructInfo(); return si ? si->size : 0; }
-	
-	bool GetStructArgInfo(DYNAPARM &aType, Object *&aPointedClass);
-	MdType GetStructMdType();
 
 	// Methods and functions:
 	void DeleteProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
