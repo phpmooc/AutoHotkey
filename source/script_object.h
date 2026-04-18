@@ -268,9 +268,9 @@ struct TypedProperty
 	Object *class_object;
 	Object *pointed_proto;
 	size_t data_offset;
-	size_t object_index;
+	size_t object_offset;
 	size_t item_count;
-	TypedProperty *next_field;
+	TypedProperty *next_field, *prev_field;
 	~TypedProperty();
 };
 
@@ -343,8 +343,8 @@ protected:
 		NewObjectProc create;
 		size_t size;
 		size_t align;
-		size_t nested_count;
-		size_t item_count; // Separate from nested_count for simplicity maintainability (since arrays of numbers have no nested objects).
+		size_t nested_object_size;
+		size_t item_count;
 		TypedProperty *first_field, *last_field;
 		Object *pointed_class;
 		Object *pointer_class;
@@ -353,6 +353,9 @@ protected:
 		MdType native_type;
 		UCHAR dllcall_type;
 		bool is_unsigned;
+
+		bool IsPointerType() { return pointed_class && !item_count; }
+		size_t SizeWhenNested() { return IsPointerType() ? sizeof(Object*) : object_size + nested_object_size + sizeof(void*); }
 	};
 
 	ResultType GetEnumProp(UINT &aIndex, Var *aName, Var *aVal, int aVarCount);
@@ -383,7 +386,7 @@ private:
 	Object *mBase = nullptr;
 	FlatVector<FieldType, index_t> mFields;
 	void *mData = nullptr;
-	Object **mNested = nullptr;
+	Object *mOuter = nullptr;
 
 	FieldType *FindField(name_t name, index_t &insert_pos);
 	FieldType *FindField(name_t name)
@@ -415,17 +418,16 @@ protected:
 	Object *GetThisForTypedValue(ResultToken &aResultToken, int aFlags, name_t aName, ExprTokenType &aThisToken);
 	ResultType GetTypedValue(ResultToken &aResultToken, int aFlags, TypedProperty &aProp);
 	ResultType SetTypedValue(ResultToken &aResultToken, int aFlags, name_t aName, TypedProperty &aProp, ExprTokenType &aValue);
-	ResultType GetBoxedPointer(ResultToken &aResultToken, UINT_PTR aPtr, Object *aPrototype, size_t aCacheIndex);
-	ResultType SetBoxedPointer(ResultToken &aResultToken, ExprTokenType &aValue, UINT_PTR &aPtr, Object *aPrototype, size_t aCacheIndex, Object *aPointerClass);
+	ResultType GetBoxedPointer(ResultToken &aResultToken, UINT_PTR aPtr, Object *aPrototype, size_t aNestOffset);
+	ResultType SetBoxedPointer(ResultToken &aResultToken, ExprTokenType &aValue, UINT_PTR &aPtr, Object *aPrototype, size_t aNestOffset, Object *aPointerClass);
 
 	ResultType CallEtter(ResultToken &aResultToken, int aFlags, IObject *aEtter, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallAsMethod(ExprTokenType &aFunc, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 	
 	ResultType CallMeta(LPTSTR aName, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallMetaVarg(int aFlags, LPTSTR aName, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
-	void CallNestedDelete();
+	void CallMetaDelete();
 	ResultType NestedNew(ResultToken &aResultToken, StructInfo *si);
-	ResultType NestedSparseInit(ResultToken& aResultToken);
 	ResultType NestedSparseInit(ResultToken& aResultToken, TypedProperty& aProp, UINT_PTR aPtr);
 	ResultType CArrayNew(ResultToken &aResultToken, StructInfo *si);
 	
@@ -447,7 +449,7 @@ public:
 
 	static ResultType ApplyParams(ResultToken &aThisResultToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
-	ResultType Initialize(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, Object *aOuter = nullptr);
+	ResultType Initialize(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallInitNew(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallNew(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, ExprTokenType &aThisToken);
 

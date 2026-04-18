@@ -293,8 +293,8 @@ FResult Object::SetDataPtr(UINT_PTR aPtr)
 {
 	if (mFlags & DataIsSuffixPtr)
 	{
-		auto si = GetStructInfo();
-		*(UINT_PTR*)((char*)this + si->object_size) = aPtr;
+		auto si = mBase->GetStructInfo();
+		*(UINT_PTR*)((char*)this + si->object_size + si->nested_object_size) = aPtr;
 	}
 	return FR_E_FAILED;
 }
@@ -319,7 +319,10 @@ UINT_PTR Object::DataPtr()
 {
 	UINT_PTR ptr = 0;
 	if (mFlags & (DataIsSuffix | DataIsSuffixPtr))
-		ptr = (UINT_PTR)this + mBase->GetStructInfo()->object_size;
+	{
+		auto si = mBase->GetStructInfo();
+		ptr = (UINT_PTR)this + si->object_size + si->nested_object_size;
+	}
 	if (mFlags & DataIsSuffixPtr)
 		ptr = *(UINT_PTR*)ptr;
 	return ptr;
