@@ -295,6 +295,7 @@ FResult Object::SetDataPtr(UINT_PTR aPtr)
 	{
 		auto si = mBase->GetStructInfo();
 		*(UINT_PTR*)((char*)this + si->object_size + si->nested_object_size) = aPtr;
+		return OK;
 	}
 	return FR_E_FAILED;
 }
