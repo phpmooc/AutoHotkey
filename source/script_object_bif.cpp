@@ -269,7 +269,7 @@ BIF_DECL(StructClass_At)
 {
 	auto class_ = ParamIndexToObject(0);
 	auto proto = class_ && class_->IsOfType(Object::sPrototype) ? ((Object*)class_)->ClassGetPrototype() : nullptr;
-	if (!proto || !proto->IsDerivedFrom(Object::sStructPrototype) || proto->LockStructSize() == 0)
+	if (!proto || !proto->IsDerivedFrom(Object::sStructPrototype))
 		_f_throw(_T("Invalid class"));
 	auto ptr = (UINT_PTR)ParamIndexToInt64(1);
 	if (ptr < 65536)
