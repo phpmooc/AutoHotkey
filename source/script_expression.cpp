@@ -1163,7 +1163,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				{
 					if (Object *right_obj = dynamic_cast<Object *>(TokenToObject(right)))
 					{
-						if (IObject *prototype = right_obj->GetOwnPropObj(_T("Prototype")))
+						if (IObject *prototype = right_obj->ClassGetPrototypeBackwardCompatible())
 						{
 							this_token.value_int64 = Object::HasBase(left, prototype);
 							break;

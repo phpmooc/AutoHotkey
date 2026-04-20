@@ -195,18 +195,17 @@ void Object::NewInstance(ResultToken &aResultToken, ExprTokenType *aParam[], int
 	IObject *cls = ParamIndexToObject(0);
 	// For backward-compatibility, this must permit any Object (not just a Class)
 	// with a Prototype own property which is any Object (not just a Prototype).
-	IObject *prt = cls && cls->IsOfType(Object::sPrototype) ? ((Object*)cls)->GetOwnPropObj(_T("Prototype")) : nullptr;
-	Object *proto = prt && prt->IsOfType(Object::sPrototype) ? (Object*)prt : nullptr;
+	Object *proto = cls && cls->IsOfType(Object::sPrototype) ? ((Object*)cls)->ClassGetPrototypeBackwardCompatible() : nullptr;
 	auto si = proto ? proto->GetStructInfo(true) : nullptr;
 	if (!si || si->create != nsi->create)
 		_f_throw_value(ERR_INVALID_BASE);
 
-	auto obj = si->create(si->nested_object_size + si->size);
-	ASSERT(si->size || !si->nested_object_size);
-	if (si->size)
+	auto suffix = si->nested_object_size + si->size;
+	auto obj = si->create(suffix);
+	if (suffix)
 	{
 		auto ptr = (UINT_PTR)obj + si->object_size;
-		ZeroMemory((void*)ptr, si->nested_object_size + si->size);
+		ZeroMemory((void*)ptr, suffix);
 		obj->mFlags |= DataIsSuffix;
 	}
 	obj->SetBase(proto);
@@ -651,7 +650,7 @@ Object::~Object()
 		if (si.array_class_map)
 			si.array_class_map->Release();
 	}
-	else if (mBase)
+	else if (mFlags & (DataIsSuffix | DataIsSuffixPtr))
 	{
 		// Call native destructor for each nested object and release any pointer held for a Ptr field.
 		auto si = mBase->GetStructInfo();
@@ -671,7 +670,7 @@ Object::~Object()
 					p->~Object();
 				}
 			}
-		if (si->pointed_class) // Struct.Array or Struct.Ptr class.
+		if (si->pointed_class) // Struct.Array or Struct.Ptr class, or a Class.
 		{
 			// Element type is inferred by overall nest size and count.
 			size_t count = max(si->item_count, 1);
@@ -1443,7 +1442,7 @@ bool Array::Append(ExprTokenType &aValue)
 
 void Object::EndClassDefinition()
 {
-	auto &obj = *(Object *)GetOwnPropObj(_T("Prototype"));
+	auto &obj = *ClassGetPrototype();
 	// Each variable declaration created a 'missing' property in the class or prototype object to prevent
 	// duplicate or conflicting declarations.  Remove them now so that the declaration acts like a normal
 	// assignment (i.e. invokes property setters and __Set), for flexibility and consistency.
@@ -1495,19 +1494,11 @@ Object *Object::GetNativeBase()
 }
 
 
-Object *Object::ClassGetPrototype()
+Object *Object::ClassGetPrototypeBackwardCompatible()
 {
-	if (IObject *p = GetOwnPropObj(_T("Prototype")))
-	{
-		// A valid prototype always has exactly the vftbl of Object::sPrototype.
-		// This produces smaller and faster code than dynamic_cast<Object*>().
-		// Callers want to be sure this is really an Object* and a Prototype,
-		// not something odd like {Prototype: Map()} or {Prototype: RECT()}.
-		if (*(void**)p == *(void**)(IObject*)Object::sPrototype
-			&& ((Object*)p)->IsClassPrototype())
-			return (Object*)p;
-	}
-	return nullptr;
+	if (auto p = GetOwnPropObj(_T("Prototype")))
+		return p->IsOfType(Object::sPrototype) ? (Object*)p : nullptr;
+	return ClassGetPrototype();
 }
 
 
@@ -1561,9 +1552,12 @@ LPTSTR Object::Type()
 
 Object *Object::CreateClass(Object *aPrototype, Object *aBase)
 {
-	auto cls = new Object();
+	auto cls = new (sizeof(Object*)) Object(ObjectIsClass | DataIsSuffix);
 	cls->SetBase(aBase);
-	cls->SetOwnProp(_T("Prototype"), aPrototype);
+	if (!sStructPrototype || !aPrototype->IsDerivedFrom(sStructPrototype))
+		cls->SetOwnProp(_T("Prototype"), aPrototype);
+	*(Object**)(cls + 1) = aPrototype;
+	aPrototype->AddRef();
 	return cls;
 }
 
@@ -2517,11 +2511,6 @@ ResultType Object::NestedNew(ResultToken &aResultToken, StructInfo *si)
 		if (!tprop->class_object || tprop->pointed_proto) // Primitive or Ptr
 			continue;
 		auto proto = tprop->class_object->ClassGetPrototype();
-		if (!proto) // FIXME: make this check unnecessary, either by making StructClass.Prototype read-only or storing the prototype elsewhere
-		{
-			result = aResultToken.Error(_T("Bad Prototype"), nullptr, ErrorPrototype::Type);
-			break;
-		}
 		
 		// Construct the nested object in the space reserved for it.
 		void *nest = (char*)this + tprop->object_offset;
@@ -4288,6 +4277,15 @@ void Object::CreateRootPrototypes()
 	auto anyClass = CreateClass(_T("Any"), sClassPrototype, sAnyPrototype, nullptr);
 	Object::sClass = CreateClass(_T("Object"), anyClass, Object::sPrototype, NewObject<Object>);
 	Object::sObjectCall = Object::sClass->GetOwnPropMethod(_T("Call"));
+	{
+		// Each Class is suffixed with a pointer to the Prototype. This instructs ~Object() to release it.
+		sClassPrototype->mFlags |= StructInfoInitialized | StructInfoLocked;
+		auto &si = *(StructInfo*)(sClassPrototype + 1);
+		si.nested_object_size = sizeof(Object*); // Pointer to Prototype.
+		si.pointed_class = sClass; // Must be non-zero for ~Object().
+		si.object_size = sizeof(Object); // For Class() without parameters.
+		si.create = NewObject<Object>;
+	}
 
 	ObjectCtor no_ctor = nullptr;
 	ObjectMemberListType no_members;
@@ -4356,6 +4354,7 @@ void Object::CreateRootPrototypes()
 	});
 
 	sStructClass = (Object*)g_script.FindGlobalVar(_T("Struct"), 6)->Object();
+	sStructClass->DefinePrototypeGetter();
 	sStructClass->DefineMethod(_T("At"), new BuiltInFunc {_T("Struct.At"), StructClass_At, 2, 2});
 	prop = sStructClass->DefineProperty(_T("__Item"));
 	prop->SetGetter(new BuiltInFunc{ _T("Struct.__Item"), StructClass_Item, 2, 2 });
@@ -4507,6 +4506,27 @@ void Object::DefineClass(name_t aName, Object *aClass, bool aIsStructPtrClass)
 
 	auto call = new BuiltInFunc { _T(""), Class_CallNestedClass, 1, 1, true, info };
 	prop->SetMethod(call);
+}
+
+
+void Object::DefinePrototypeGetter()
+{
+	static BuiltInFunc sClassPrototypeGet{ _T("Class.Prototype.Get"), Class_Prototype, 1, 1 };
+
+	auto prop = DefineProperty(_T("Prototype"));
+	prop->SetGetter(&sClassPrototypeGet);
+	prop->NoParamGet = true;
+}
+
+
+BIF_DECL(Class_Prototype)
+{
+	auto obj0 = ParamIndexToObject(0);
+	auto p = obj0 && obj0->IsOfType(Object::sPrototype) ? ((Object*)obj0)->ClassGetPrototype() : nullptr;
+	if (!p)
+		_o_throw_type(_T("Class"), *aParam[0]);
+	p->AddRef();
+	_o_return(p);
 }
 
 

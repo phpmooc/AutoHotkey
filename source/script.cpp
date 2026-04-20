@@ -5851,7 +5851,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, FuncDefType aIsInExpres
 	{
 		Object *class_object = mClassObject[mClassObjectCount - 1];
 		if (!aStatic)
-			class_object = (Object *)class_object->GetOwnPropObj(_T("Prototype"));
+			class_object = class_object->ClassGetPrototype();
 
 		*param_start = '\0'; // Temporarily terminate, for simplicity.
 
@@ -6180,6 +6180,7 @@ ResultType Script::DefineClass(LPTSTR aBuf, TCHAR aExport, bool aStruct)
 	Object *outer_class;
 	Object *base_class = aStruct ? Object::sStructClass : Object::sClass;
 	Object *base_prototype = aStruct ? Object::sStructPrototype : Object::sPrototype;
+	bool base_is_known = true;
 	Var *class_var;
 	ExprTokenType token;
 
@@ -6194,7 +6195,7 @@ ResultType Script::DefineClass(LPTSTR aBuf, TCHAR aExport, bool aStruct)
 		base_class_name = omit_leading_whitespace(cp + 8);
 		if (!*base_class_name)
 			return ScriptError(_T("Missing class name."), cp);
-		ResolveBaseClass(base_class_name, aStruct, base_class, base_prototype);
+		base_is_known = ResolveBaseClass(base_class_name, aStruct, base_class, base_prototype);
 	}
 
 	// Validate the name even if this is a nested definition, for consistency.
@@ -6252,7 +6253,7 @@ ResultType Script::DefineClass(LPTSTR aBuf, TCHAR aExport, bool aStruct)
 	Object *prototype = Object::CreatePrototype(mClassName, base_prototype);
 	Object *class_object = Object::CreateClass(prototype, base_class ? base_class : Object::sClassPrototype);
 
-	if (!base_class)
+	if (!base_is_known)
 	{
 		// None of this module's class declarations up to this point match base_class_name,
 		// but it could be a class defined below this point, or a class defined in a module
@@ -6343,7 +6344,7 @@ ResultType Script::DefineClassProperty(LPTSTR aBuf, bool aStatic, bool &aBufHasB
 
 	Object *class_object = mClassObject[mClassObjectCount - 1];
 	if (!aStatic)
-		class_object = (Object *)class_object->GetOwnPropObj(_T("Prototype"));
+		class_object = class_object->ClassGetPrototype();
 	TCHAR end_char = *name_end; // In case there's no space before =>.
 	*name_end = 0; // Terminate for aBuf use below.
 	switch (class_object->GetOwnPropType(aBuf))
@@ -6404,7 +6405,7 @@ ResultType Script::DefineClassPropertyXet(LPTSTR aBuf, LPTSTR aEnd)
 ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 {
 	Object *class_object = mClassObject[mClassObjectCount - 1];
-	Object *prototype = aStatic ? class_object : (Object *)class_object->GetOwnPropObj(_T("Prototype"));
+	Object *prototype = aStatic ? class_object : class_object->ClassGetPrototype();
 
 	LPTSTR item, item_end;
 	TCHAR orig_char, buf[LINE_SIZE], type_buf[LINE_SIZE];
@@ -6711,14 +6712,13 @@ Object *Script::FindClass(LPCTSTR aClassName, size_t aClassNameLength)
 bool Script::ResolveBaseClass(LPCTSTR aClassName, bool aStruct, Object *&aClass, Object *&aProto)
 {
 	auto c = FindClass(aClassName);
-	auto p = c ? (Object*)c->GetOwnPropObj(_T("Prototype")) : nullptr;
+	auto p = c ? c->ClassGetPrototype() : nullptr;
 	if (p && aStruct == (p->IsDerivedFrom(Object::sStructPrototype) || p == Object::sStructPrototype))
 	{
 		aClass = c;
 		aProto = p;
 		return true;
 	}
-	aClass = aProto = nullptr;
 	return false;
 }
 
@@ -7962,7 +7962,7 @@ ResultType Script::PreparseCatchClass(Line *aLine)
 		if (end == cp)
 			return aLine->LineError(ERR_EXPR_SYNTAX);
 		auto cls = FindClass(cp, end - cp);
-		if (  !cls || !(prototype[prototype_count++] = cls->GetOwnPropObj(_T("Prototype")))  )
+		if (  !cls || !(prototype[prototype_count++] = cls->ClassGetPrototype())  )
 			return aLine->LineError(_T("Invalid class."), FAIL, cp);
 		cp = next;
 	}
