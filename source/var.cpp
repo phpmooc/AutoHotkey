@@ -215,6 +215,10 @@ void Var::UpdateVirtualObj(IObject *aTargetRef)
 
 IObject *Var::GetRef()
 {
+	// GetRef() should only be called on actual variables referenced by the script,
+	// so if "this" is a VarRef or downvar, there's probably a bug.  Avoid temptation
+	// to return (VarRef*)this, since downvars have VAR_VARREF and aren't VarRefs.
+	ASSERT(!(mScope & VAR_VARREF));
 	auto target_var = this;
 	if (mType == VAR_ALIAS)
 	{
