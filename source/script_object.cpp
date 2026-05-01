@@ -4408,6 +4408,7 @@ void Object::CreateRootPrototypes()
 
 	sCArrayPrototype = CreatePrototype(_T("Struct.Array"), sStructPrototype, sCArrayMembers, _countof(sCArrayMembers));
 	sCArrayPrototype->mFlags &= ~NativeClassPrototype;
+	sCArrayPrototype->mFlags |= StructInfoLocked;
 	sCArrayClass = CreateClass(sCArrayPrototype, sStructClass);
 	sStructClass->DefineClass(_T("Array"), sCArrayClass, true);
 
