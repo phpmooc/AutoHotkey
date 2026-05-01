@@ -916,6 +916,14 @@ ResultType Script::SetTrayIcon(LPCTSTR aIconFile, int aIconNumber, ToggleValueTy
 		new_icon_small = (HICON)(UINT_PTR)ATOI64(aIconFile + 6);
 		new_icon = new_icon_small; // DestroyIconsIfUnused() handles this case by calling DestroyIcon() only once.
 	}
+	else if (!_tcsnicmp(aIconFile, _T("HBITMAP:"), 8) && aIconFile[8] != '*')
+	{
+		// This case must be handled for the same reasons as above.
+		ICONINFO iconinfo;
+		iconinfo.fIcon = TRUE;
+		iconinfo.hbmColor = iconinfo.hbmMask = (HBITMAP)(UINT_PTR)ATOI64(aIconFile + 8);
+		new_icon_small = new_icon = CreateIconIndirect(&iconinfo);
+	}
 	else if ( new_icon_small = (HICON)LoadPicture(aIconFile, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), image_type, aIconNumber, false) ) // Called with icon_number > 0, it guarantees return of an HICON/HCURSOR, never an HBITMAP.
 		if ( !(new_icon = (HICON)LoadPicture(aIconFile, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), image_type, aIconNumber, false, NULL, &icon_module)) )
 			DestroyIcon(new_icon_small);
