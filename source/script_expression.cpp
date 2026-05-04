@@ -417,14 +417,25 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				goto push_this_token;
 			}
 
+			done = EXPR_IS_DONE;
+
 			if (result_token.symbol != SYM_STRING)
 			{
 				if (result_token.symbol == SYM_MISSING && !(flags & EIF_UNSET_RETURN)) // Result is unset and not marked with ?/??.
 				{
-					if (result_token.unset_kind == UnsetKind::Blank && g_script.BackCompatMode())
+					if (result_token.unset_kind == UnsetKind::Blank)
 					{
-						this_token.SetValue(_T(""), 0);
-						goto push_this_token;
+						if (g_script.BackCompatMode())
+						{
+							this_token.SetValue(_T(""), 0);
+							goto push_this_token;
+						}
+						if (done && mActionType == ACT_RETURN && (flags & IT_CALL)
+							&& g->CurrentFunc && g->CurrentFunc->IsFatArrow())
+						{
+							this_token.Unset(UnsetKind::Blank);
+							goto push_this_token;
+						}
 					}
 					Object *err;
 					LPCTSTR msg;
@@ -447,8 +458,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				goto push_this_token;
 			}
 			
-			done = EXPR_IS_DONE;
-
 			// v1.0.45: If possible, take a shortcut for performance.  Doing it this way saves at least
 			// two memcpy's (one into deref buffer and then another back into the output_var by
 			// ACT_ASSIGNEXPR itself).  In some cases is also saves from having to expand the deref

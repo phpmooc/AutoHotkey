@@ -373,7 +373,8 @@ struct ArgStruct
 enum FuncDefType : UCHAR
 {
 	FuncDefNormal = FALSE,
-	FuncDefFatArrow,
+	FuncDefFatArrowStandalone,
+	FuncDefFatArrow, // Keep in this order for range checks.
 	FuncDefExpression,
 	FuncDefExpressionResolved
 };
@@ -1503,7 +1504,9 @@ public:
 	int mClosureCount = 0;
 
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
-	FuncDefType mIsFuncExpression; // Whether this function was defined *within* an expression and is therefore allowed under a control flow statement.
+	FuncDefType mIsFuncExpression;
+	inline bool IsInExpression() { return mIsFuncExpression >= FuncDefFatArrow; } // Whether this function was defined *within* an expression and is therefore allowed under a control flow statement.
+	inline bool IsFatArrow() { return mIsFuncExpression == FuncDefFatArrow || mIsFuncExpression == FuncDefFatArrowStandalone; }
 	bool mIsStatic = false; // Whether the "static" keyword was used with a function (not method); this prevents a nested function from becoming a closure.
 	bool mBackCompatMode; // true = requires v2.0, false = requires v2.1
 #define VAR_DECLARE_GLOBAL (VAR_DECLARED | VAR_GLOBAL)

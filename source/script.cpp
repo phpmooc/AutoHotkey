@@ -6165,6 +6165,8 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, FuncDefType aIsInExpres
 			return ScriptError(ERR_INVALID_FUNCDECL, aBuf);
 		if (!ParseAndAddLineInBlock(param_start, ACT_RETURN))
 			return FAIL;
+		if (func.mIsFuncExpression == FuncDefNormal)
+			func.mIsFuncExpression = FuncDefFatArrowStandalone;
 	}
 	else
 	{
@@ -7733,7 +7735,7 @@ ResultType Script::PreparseCommands(ScriptModule *aModule)
 				Line *block_begin = line->mParentLine;
 				Line *parent = block_begin->mParentLine;
 
-				if (func.mIsFuncExpression // =>
+				if (func.IsInExpression()
 					&& block_begin->mParentLine
 					&& block_begin->mParentLine->mActionType != ACT_BLOCK_BEGIN)
 				{
