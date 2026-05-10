@@ -9607,7 +9607,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 			continue; // This token was already put into postfix by an earlier stage, so skip it this time.
 		}
 		case SYM_IFF_THEN:
-			return LineError(_T("Unexpected \"?\""), FAIL, this_postfix->marker);
+			return LineError(_T("Unexpected \"?\""), FAIL, this_postfix->error_reporting_marker);
 		
 		case SYM_MAYBE:
 		{
