@@ -8574,7 +8574,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 						maybe = true;
 						cp = op_end; // The loop will skip over '.' itself.
 					}
-					else if (*op_end == '.' && IS_IDENTIFIER_CHAR(op_end[1])) // x?.y or x?.123
+					else if (*op_end == '.' && (IS_IDENTIFIER_CHAR(op_end[1]) || op_end[1] == g_DerefChar)) // x?.y or x?.123 or x?.%y%
 					{
 						// Do some extra checks to allow an optional chain enclosed in parentheses to use numeric
 						// property names without breaking expressions like a?.123:b, for backward-compatibility.
