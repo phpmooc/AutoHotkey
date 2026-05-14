@@ -4233,7 +4233,7 @@ ObjectMember Object::sStructMembers[]
 
 ObjectMember Object::sPtrMembers[]
 {
-	Object_Member(__Value, StructPtrInvoke, 0, IT_SET)
+	Object_Member(__Value, StructPtrInvoke, 0, IT_SET | BIMF_UNSET_ARG_1)
 };
 
 ObjectMember Object::sCArrayMembers[]
