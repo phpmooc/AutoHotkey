@@ -4405,6 +4405,7 @@ void Object::CreateRootPrototypes()
 		auto &psi = *(StructInfo*)(sPtrPrototype + 1);
 		psi.align = psi.size = sizeof(void*);
 		psi.pointed_class = sStructClass; // This is not a counted reference.
+		psi.nested_object_size = sizeof(Object*);
 		psi.object_size = sizeof(Object);
 		auto &ssi = *(StructInfo*)(sStructPrototype + 1);
 		ssi.align = 1;
