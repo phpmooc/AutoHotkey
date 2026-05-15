@@ -941,6 +941,14 @@ ResultType Script::SetTrayIcon(LPCTSTR aIconFile, int aIconNumber, ToggleValueTy
 		new_icon_small = (HICON)(UINT_PTR)ATOI64(aIconFile + 6);
 		new_icon = new_icon_small; // DestroyIconsIfUnused() handles this case by calling DestroyIcon() only once.
 	}
+	else if (!_tcsnicmp(aIconFile, _T("HBITMAP:"), 8) && aIconFile[8] != '*')
+	{
+		// This case must be handled for the same reasons as above.
+		ICONINFO iconinfo;
+		iconinfo.fIcon = TRUE;
+		iconinfo.hbmColor = iconinfo.hbmMask = (HBITMAP)(UINT_PTR)ATOI64(aIconFile + 8);
+		new_icon_small = new_icon = CreateIconIndirect(&iconinfo);
+	}
 	else if ( new_icon_small = (HICON)LoadPicture(aIconFile, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), image_type, aIconNumber, false) ) // Called with icon_number > 0, it guarantees return of an HICON/HCURSOR, never an HBITMAP.
 		if ( !(new_icon = (HICON)LoadPicture(aIconFile, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), image_type, aIconNumber, false, NULL, &icon_module)) )
 			DestroyIcon(new_icon_small);
@@ -7734,22 +7742,23 @@ ResultType Script::PreparseCommands(ScriptModule *aModule)
 				Line *block_begin = line->mParentLine;
 				Line *parent = block_begin->mParentLine;
 
-				if (func.IsInExpression()
-					&& block_begin->mParentLine
-					&& block_begin->mParentLine->mActionType != ACT_BLOCK_BEGIN)
+				if (func.mIsFuncExpression == FuncDefFatArrow)
 				{
-					if (line->mNextLine->mActionType == ACT_BLOCK_BEGIN) // It could only be a fat arrow block-begin under these conditions.
-						// There's another =>function after this one (defined within the same
-						// expression), so just continue until the last =>function is found.
-						continue;
-					// This fat arrow function's parent line is a statement with a single-line
-					// action, but that action is currently separated from its parent by one or
+					// If this fat arrow function's parent line is a statement with a single-line
+					// action, that action is currently separated from its parent by one or
 					// more fat arrow functions.  It won't work that way because If/Else/Loop/etc.
 					// all skip an initial ACT_BLOCK_BEGIN (to avoid an extra ExecUntil call),
 					// which would result in executing the function's body instead of skipping it.
-					Line *body = line->mNextLine;
-					// Remove the fat arrow functions to allow the correct body to execute.
-					parent->mNextLine = body, body->mPrevLine = parent;
+					// If the parent is a block, this is needed only to let breakpoints work on the
+					// line which contains the arrow function.
+					Line *next = line->mNextLine;
+					Line *prev = block_begin->mPrevLine;
+					// Remove the fat arrow function from the outer Line list.
+					if (prev)
+						prev->mNextLine = next;
+					else
+						mCurrentModule->mFirstLine = next;
+					next->mPrevLine = prev;
 					// If this wasn't unset, an error dialog would walk upward to find a previous line,
 					// then step forward and fail to find the original target line.  Instead, it will
 					// display from the function's block-begin downward, usually including the expression
