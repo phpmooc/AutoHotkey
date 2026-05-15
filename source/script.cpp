@@ -7502,22 +7502,23 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 				Line *block_begin = line->mParentLine;
 				Line *parent = block_begin->mParentLine;
 
-				if (func.mIsFuncExpression // =>
-					&& block_begin->mParentLine
-					&& block_begin->mParentLine->mActionType != ACT_BLOCK_BEGIN)
+				if (func.mIsFuncExpression) // =>
 				{
-					if (line->mNextLine->mActionType == ACT_BLOCK_BEGIN) // It could only be a fat arrow block-begin under these conditions.
-						// There's another =>function after this one (defined within the same
-						// expression), so just continue until the last =>function is found.
-						continue;
-					// This fat arrow function's parent line is a statement with a single-line
-					// action, but that action is currently separated from its parent by one or
+					// If this fat arrow function's parent line is a statement with a single-line
+					// action, that action is currently separated from its parent by one or
 					// more fat arrow functions.  It won't work that way because If/Else/Loop/etc.
 					// all skip an initial ACT_BLOCK_BEGIN (to avoid an extra ExecUntil call),
 					// which would result in executing the function's body instead of skipping it.
-					Line *body = line->mNextLine;
-					// Remove the fat arrow functions to allow the correct body to execute.
-					parent->mNextLine = body, body->mPrevLine = parent;
+					// If the parent is a block, this is needed only to let breakpoints work on the
+					// line which contains the arrow function.
+					Line *next = line->mNextLine;
+					Line *prev = block_begin->mPrevLine;
+					// Remove the fat arrow function from the outer Line list.
+					if (prev)
+						prev->mNextLine = next;
+					else
+						mFirstLine = next;
+					next->mPrevLine = prev;
 					// If this wasn't unset, an error dialog would walk upward to find a previous line,
 					// then step forward and fail to find the original target line.  Instead, it will
 					// display from the function's block-begin downward, usually including the expression
