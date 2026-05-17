@@ -650,6 +650,8 @@ BIF_DECL(BIF_DllCall)
 		else
 		{
 			ConvertDllArgType(return_type_string, return_attrib);
+			if (return_attrib.type == DLL_ARG_INVALID && !_tcsicmp(return_type_string, _T("Void")))
+				return_attrib.type = DLL_ARG_VOID;
 		}
 		if (return_attrib.type == DLL_ARG_INVALID || return_struct_size == -1)
 			_f_throw_value(ERR_INVALID_RETURN_TYPE);
@@ -1076,12 +1078,11 @@ has_valid_return_type:
 			aResultToken.symbol = SYM_FLOAT; // There is no SYM_DOUBLE since all floats are stored as doubles.
 			aResultToken.value_double = return_value.Double;
 			break;
-		//case DLL_ARG_STRUCT: // This case is handled once successful return is certain.
-		//	aResultToken.SetValue(pObj[0]);
-		//	break;
-		//default: // Should never be reached unless there's a bug.
-		//	aResultToken.symbol = SYM_STRING;
-		//	aResultToken.marker = "";
+		default: // Should never be reached unless there's a bug (but might as well handle it, since it doesn't increase code size).
+		case DLL_ARG_VOID: // Return blank-unset, which is also the default Invoke return value.
+		case DLL_ARG_STRUCT: // Structs are handled later, but need aResultToken initialized like this.
+			aResultToken.InitInvokeRetVal();
+			break;
 		} // switch(return_attrib.type)
 	} // Storing the return value when no exception occurred.
 
@@ -1209,7 +1210,6 @@ has_valid_return_type:
 
 	if (return_struct_size && !aResultToken.Exited())
 	{
-		aResultToken.InitInvokeRetVal();
 		auto result = pObj[0]->Invoke(aResultToken, IT_GET | IF_BYPASS_METAFUNC, _T("__value"), ExprTokenType(pObj[0]), nullptr, 0);
 		if (result == INVOKE_NOT_HANDLED)
 		{

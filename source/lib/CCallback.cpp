@@ -285,8 +285,10 @@ UINT64 CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used b
 				if (obj != result_obj)
 					obj->Release();
 			}
-			else
+			else if (ret_type != MdType::Void)
+			{
 				SetValueOfTypeAtPtr(ret_type, ret_ptr, result_token, result_token);
+			}
 		}
 		result_token.Free();
 	}
@@ -403,7 +405,8 @@ bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, ExprTokenT
 		for (UINT i = 0; i < param_types->Length(); ++i)
 		{
 			param_types->ItemToToken(i, v);
-			at[i].type = TypeCode(TokenToString(v));
+			auto typestring = TokenToString(v);
+			at[i].type = TypeCode(typestring);
 			at[i].proto = nullptr;
 			if (at[i].type == MdType::Void)
 			{
@@ -421,6 +424,11 @@ bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, ExprTokenT
 						}
 						continue;
 					}
+				}
+				else if (!_tcsicmp(typestring, _T("Void")))
+				{
+					if (i + 1 == param_types->Length())
+						continue;
 				}
 				GlobalFree((HGLOBAL)callbackfunc);
 				return FR_E_ARG(2);
